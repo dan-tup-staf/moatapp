@@ -4,6 +4,8 @@ from app.models.lead import Lead
 from app.models.lead_list import LeadList
 from app.models.message import Message
 from app.models.sequence_step import SequenceStep
+from app.models.signal import Signal
+from app.models.signal_source import SignalSource
 from app.models.user import User
 
 __all__ = [
@@ -14,4 +16,6 @@ __all__ = [
     "SequenceStep",
     "CampaignEnrollment",
     "Message",
+    "SignalSource",
+    "Signal",
 ]

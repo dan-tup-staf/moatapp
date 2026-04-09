@@ -3,6 +3,7 @@ from arq.connections import RedisSettings
 
 from app.config import settings
 from app.workers.email_tasks import send_due_emails
+from app.workers.scraper_tasks import run_signal_scrapers
 
 
 async def startup(ctx: dict) -> None:
@@ -26,9 +27,13 @@ def _redis_settings_from_url(url: str) -> RedisSettings:
 
 
 class WorkerSettings:
-    functions = [send_due_emails]
+    functions = [send_due_emails, run_signal_scrapers]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = _redis_settings_from_url(settings.redis_url)
-    # Run the email sender once a minute (at second :00 of every minute)
-    cron_jobs = [cron(send_due_emails, run_at_startup=True)]
+    cron_jobs = [
+        # Email sender — once per minute (default: minute=None, second=0)
+        cron(send_due_emails, run_at_startup=True),
+        # Signal scrapers — every 15 minutes
+        cron(run_signal_scrapers, minute={0, 15, 30, 45}, run_at_startup=True),
+    ]
