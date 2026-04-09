@@ -192,6 +192,34 @@ export type RunResult = {
   error: string | null;
 };
 
+// ---------- Dashboard ----------
+
+export type DashboardStats = {
+  leads_total: number;
+  leads_contacted: number;
+  campaigns_total: number;
+  campaigns_active: number;
+  messages_sent_total: number;
+  messages_sent_last_7d: number;
+  signals_total: number;
+  signals_last_7d: number;
+  active_enrollments: number;
+};
+
+export type HotLead = {
+  id: number;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  company: string | null;
+  title: string | null;
+  status: string;
+  score: number;
+  list_id: number;
+  list_name: string;
+  signals_count: number;
+};
+
 // ---------- Errors ----------
 
 export class ApiError extends Error {
@@ -413,5 +441,12 @@ export const api = {
 
     delete: (id: number) =>
       authed<void>(`/signals/${id}`, { method: "DELETE" }),
+  },
+
+  // Dashboard
+  dashboard: {
+    stats: () => authed<DashboardStats>("/dashboard/stats"),
+    hotLeads: (limit = 10) =>
+      authed<HotLead[]>(`/dashboard/hot-leads?limit=${limit}`),
   },
 };
