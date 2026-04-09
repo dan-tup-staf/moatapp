@@ -33,7 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     api
-      .me(token)
+      .me()
       .then(setUser)
       .catch(() => {
         // token invalid/expired — clear it
@@ -45,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (token: string) => {
     tokenStorage.set(token);
-    const u = await api.me(token);
+    const u = await api.me();
     setUser(u);
   }, []);
 

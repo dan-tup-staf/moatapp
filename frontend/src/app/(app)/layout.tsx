@@ -1,12 +1,19 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { useAuth } from "@/contexts/auth-context";
 
+const NAV_ITEMS = [
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/lists", label: "Listy" },
+];
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, loading, logout } = useAuth();
 
   useEffect(() => {
@@ -39,6 +46,30 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </header>
+
+      <nav className="border-b border-gray-200 bg-white">
+        <div className="mx-auto flex max-w-6xl gap-1 px-6">
+          {NAV_ITEMS.map((item) => {
+            const active =
+              pathname === item.href || pathname.startsWith(item.href + "/");
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={
+                  "border-b-2 px-3 py-2 text-sm font-medium transition-colors " +
+                  (active
+                    ? "border-gray-900 text-gray-900"
+                    : "border-transparent text-gray-500 hover:text-gray-900")
+                }
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+
       <main className="mx-auto max-w-6xl p-6">{children}</main>
     </div>
   );
