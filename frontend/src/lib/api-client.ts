@@ -325,5 +325,11 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ step_id: stepId, lead_id: leadId }),
       }),
+
+    sendDueNow: (campaignId: number) =>
+      authed<{ processed: number }>(
+        `/campaigns/${campaignId}/send-due-now`,
+        { method: "POST" },
+      ),
   },
 };

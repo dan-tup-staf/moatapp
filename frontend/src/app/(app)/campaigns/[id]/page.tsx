@@ -53,6 +53,10 @@ export default function CampaignDetailPage() {
   const [enrolling, setEnrolling] = useState(false);
   const [enrollMsg, setEnrollMsg] = useState<string | null>(null);
 
+  // Send due now
+  const [sending, setSending] = useState(false);
+  const [sendMsg, setSendMsg] = useState<string | null>(null);
+
   // Preview
   const [previewStepId, setPreviewStepId] = useState<number | "">("");
   const [previewLeadId, setPreviewLeadId] = useState<number | "">("");
@@ -168,6 +172,24 @@ export default function CampaignDetailPage() {
       await refresh();
     } catch (err) {
       alert(err instanceof ApiError ? err.detail : "Błąd");
+    }
+  }
+
+  async function handleSendDueNow() {
+    setSending(true);
+    setSendMsg(null);
+    try {
+      const result = await api.campaigns.sendDueNow(campaignId);
+      setSendMsg(
+        result.processed > 0
+          ? `Wysłano ${result.processed} maili. Sprawdź Mailhog: http://localhost:8025`
+          : "Brak enrollmentów gotowych do wysyłki (next_send_at > now())",
+      );
+      await refresh();
+    } catch (err) {
+      setSendMsg(err instanceof ApiError ? `Błąd: ${err.detail}` : "Błąd");
+    } finally {
+      setSending(false);
     }
   }
 
@@ -342,9 +364,24 @@ export default function CampaignDetailPage() {
 
       {/* Enrollment */}
       <section className="space-y-3">
-        <h3 className="text-sm font-medium text-gray-700">
-          Enrollment leadów
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-medium text-gray-700">
+            Enrollment leadów
+          </h3>
+          <button
+            onClick={handleSendDueNow}
+            disabled={sending || enrollments.length === 0}
+            className="rounded-md border border-gray-900 bg-white px-3 py-1 text-xs font-medium text-gray-900 hover:bg-gray-100 disabled:opacity-50"
+            title="Wymuś wysyłkę wszystkich enrollmentów z next_send_at <= now() (zwykle worker robi to co minutę)"
+          >
+            {sending ? "Wysyłanie..." : "Wyślij due teraz"}
+          </button>
+        </div>
+        {sendMsg && (
+          <p className="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">
+            {sendMsg}
+          </p>
+        )}
 
         <form
           onSubmit={handleEnroll}
@@ -404,6 +441,9 @@ export default function CampaignDetailPage() {
                   <th className="px-4 py-2 text-right font-medium text-gray-700">
                     Step
                   </th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-700">
+                    Następna wysyłka
+                  </th>
                   <th className="px-4 py-2"></th>
                 </tr>
               </thead>
@@ -428,6 +468,11 @@ export default function CampaignDetailPage() {
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-gray-900">
                       {e.current_step}
+                    </td>
+                    <td className="px-4 py-2 text-xs text-gray-600">
+                      {e.next_send_at
+                        ? new Date(e.next_send_at).toLocaleString("pl-PL")
+                        : "—"}
                     </td>
                     <td className="px-4 py-2 text-right">
                       <button

@@ -1,6 +1,8 @@
+from arq import cron
 from arq.connections import RedisSettings
 
 from app.config import settings
+from app.workers.email_tasks import send_due_emails
 
 
 async def startup(ctx: dict) -> None:
@@ -13,7 +15,6 @@ async def shutdown(ctx: dict) -> None:
 
 def _redis_settings_from_url(url: str) -> RedisSettings:
     # arq's RedisSettings expects host/port/database separately.
-    # Parse a simple redis://host:port/db URL.
     from urllib.parse import urlparse
 
     parsed = urlparse(url)
@@ -25,7 +26,9 @@ def _redis_settings_from_url(url: str) -> RedisSettings:
 
 
 class WorkerSettings:
-    functions: list = []  # task functions registered here later
+    functions = [send_due_emails]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = _redis_settings_from_url(settings.redis_url)
+    # Run the email sender once a minute (at second :00 of every minute)
+    cron_jobs = [cron(send_due_emails, run_at_startup=True)]

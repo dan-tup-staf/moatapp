@@ -20,6 +20,7 @@ from app.schemas.campaigns import (
     StepUpdate,
 )
 from app.services import campaigns as svc
+from app.services.email_sender import process_due_enrollments
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
@@ -218,6 +219,19 @@ async def unenroll(
 
 
 # ---------- Preview ----------
+
+
+@router.post("/{campaign_id}/send-due-now")
+async def send_due_now(
+    campaign_id: int,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Manually trigger the email sender for this campaign's due enrollments.
+    Useful in dev so you don't have to wait for the next cron tick."""
+    await _ensure_owned_campaign(db, current, campaign_id)
+    processed = await process_due_enrollments(campaign_id=campaign_id)
+    return {"processed": processed}
 
 
 @router.post("/{campaign_id}/preview", response_model=PreviewResponse)
