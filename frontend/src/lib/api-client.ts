@@ -144,6 +144,54 @@ export type PreviewResponse = {
   body: string;
 };
 
+// ---------- Signals ----------
+
+export type SourceType = "rss" | "job_posting" | "news" | "tech_change";
+
+export type SignalSource = {
+  id: number;
+  name: string;
+  type: SourceType;
+  config: Record<string, unknown>;
+  enabled: boolean;
+  score_weight: number;
+  last_run_at: string | null;
+  last_error: string | null;
+  created_at: string;
+  signals_count: number;
+};
+
+export type SignalSourceCreate = {
+  name: string;
+  type: SourceType;
+  config: Record<string, unknown>;
+  enabled?: boolean;
+  score_weight?: number;
+};
+
+export type SignalSourceUpdate = Partial<
+  Omit<SignalSourceCreate, "type">
+> & { enabled?: boolean };
+
+export type Signal = {
+  id: number;
+  source_id: number;
+  source_name: string | null;
+  lead_id: number | null;
+  lead_email: string | null;
+  company_domain: string | null;
+  title: string;
+  url: string | null;
+  payload: Record<string, unknown>;
+  score_weight: number;
+  detected_at: string;
+};
+
+export type RunResult = {
+  new_signals: number;
+  error: string | null;
+};
+
 // ---------- Errors ----------
 
 export class ApiError extends Error {
@@ -331,5 +379,39 @@ export const api = {
         `/campaigns/${campaignId}/send-due-now`,
         { method: "POST" },
       ),
+  },
+
+  // Signal sources
+  signalSources: {
+    list: () => authed<SignalSource[]>("/signal-sources"),
+
+    create: (data: SignalSourceCreate) =>
+      authed<SignalSource>("/signal-sources", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+
+    get: (id: number) => authed<SignalSource>(`/signal-sources/${id}`),
+
+    update: (id: number, data: SignalSourceUpdate) =>
+      authed<SignalSource>(`/signal-sources/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+
+    delete: (id: number) =>
+      authed<void>(`/signal-sources/${id}`, { method: "DELETE" }),
+
+    runNow: (id: number) =>
+      authed<RunResult>(`/signal-sources/${id}/run-now`, { method: "POST" }),
+  },
+
+  // Signals feed
+  signals: {
+    list: (limit = 100) =>
+      authed<Signal[]>(`/signals?limit=${limit}`),
+
+    delete: (id: number) =>
+      authed<void>(`/signals/${id}`, { method: "DELETE" }),
   },
 };
