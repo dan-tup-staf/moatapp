@@ -1,13 +1,22 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+
+import { useAuth } from "@/contexts/auth-context";
+
 export default function Home() {
+  const router = useRouter();
+  const { user, loading } = useAuth();
+
+  useEffect(() => {
+    if (loading) return;
+    router.replace(user ? "/dashboard" : "/login");
+  }, [user, loading, router]);
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-24">
-      <h1 className="text-5xl font-bold tracking-tight">MOATAPP</h1>
-      <p className="mt-4 text-lg text-gray-600">
-        Prospecting + buying signals
-      </p>
-      <p className="mt-8 text-sm text-gray-400">
-        v0.1.0 — scaffolding
-      </p>
-    </main>
+    <div className="flex min-h-screen items-center justify-center bg-gray-50">
+      <p className="text-sm text-gray-500">Ładowanie...</p>
+    </div>
   );
 }
