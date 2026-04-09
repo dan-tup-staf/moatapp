@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/auth-context";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/lists", label: "Listy" },
+  { href: "/campaigns", label: "Kampanie" },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

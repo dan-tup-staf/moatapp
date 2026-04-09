@@ -69,6 +69,81 @@ export type CsvImportResult = {
   errors: string[];
 };
 
+// ---------- Campaigns ----------
+
+export type CampaignStatus = "draft" | "active" | "paused" | "archived";
+
+export type Campaign = {
+  id: number;
+  name: string;
+  status: CampaignStatus;
+  from_email: string;
+  from_name: string | null;
+  created_at: string;
+  updated_at: string;
+  steps_count: number;
+  enrollments_count: number;
+};
+
+export type CampaignCreate = {
+  name: string;
+  from_email: string;
+  from_name?: string;
+};
+
+export type CampaignUpdate = Partial<CampaignCreate> & {
+  status?: CampaignStatus;
+};
+
+export type SequenceStep = {
+  id: number;
+  campaign_id: number;
+  step_order: number;
+  subject: string;
+  body_template: string;
+  delay_days: number;
+};
+
+export type StepCreate = {
+  step_order: number;
+  subject: string;
+  body_template: string;
+  delay_days: number;
+};
+
+export type StepUpdate = Partial<StepCreate>;
+
+export type EnrollmentStatus =
+  | "active"
+  | "completed"
+  | "paused"
+  | "replied"
+  | "bounced";
+
+export type Enrollment = {
+  id: number;
+  campaign_id: number;
+  lead_id: number;
+  current_step: number;
+  next_send_at: string | null;
+  status: EnrollmentStatus;
+  created_at: string;
+  updated_at: string;
+  lead_email: string | null;
+  lead_name: string | null;
+  lead_company: string | null;
+};
+
+export type EnrollResult = {
+  enrolled: number;
+  skipped_already_enrolled: number;
+};
+
+export type PreviewResponse = {
+  subject: string;
+  body: string;
+};
+
 // ---------- Errors ----------
 
 export class ApiError extends Error {
@@ -186,5 +261,69 @@ export const api = {
 
     importCsv: (listId: number, file: File) =>
       uploadFile<CsvImportResult>(`/lists/${listId}/leads/import`, file),
+  },
+
+  // Campaigns
+  campaigns: {
+    list: () => authed<Campaign[]>("/campaigns"),
+
+    create: (data: CampaignCreate) =>
+      authed<Campaign>("/campaigns", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+
+    get: (id: number) => authed<Campaign>(`/campaigns/${id}`),
+
+    update: (id: number, data: CampaignUpdate) =>
+      authed<Campaign>(`/campaigns/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+
+    delete: (id: number) =>
+      authed<void>(`/campaigns/${id}`, { method: "DELETE" }),
+
+    // Steps
+    listSteps: (campaignId: number) =>
+      authed<SequenceStep[]>(`/campaigns/${campaignId}/steps`),
+
+    createStep: (campaignId: number, data: StepCreate) =>
+      authed<SequenceStep>(`/campaigns/${campaignId}/steps`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+
+    updateStep: (campaignId: number, stepId: number, data: StepUpdate) =>
+      authed<SequenceStep>(`/campaigns/${campaignId}/steps/${stepId}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+
+    deleteStep: (campaignId: number, stepId: number) =>
+      authed<void>(`/campaigns/${campaignId}/steps/${stepId}`, {
+        method: "DELETE",
+      }),
+
+    // Enrollments
+    listEnrollments: (campaignId: number) =>
+      authed<Enrollment[]>(`/campaigns/${campaignId}/enrollments`),
+
+    enrollFromList: (campaignId: number, listId: number) =>
+      authed<EnrollResult>(`/campaigns/${campaignId}/enrollments`, {
+        method: "POST",
+        body: JSON.stringify({ list_id: listId }),
+      }),
+
+    unenroll: (campaignId: number, enrollmentId: number) =>
+      authed<void>(`/campaigns/${campaignId}/enrollments/${enrollmentId}`, {
+        method: "DELETE",
+      }),
+
+    preview: (campaignId: number, stepId: number, leadId: number) =>
+      authed<PreviewResponse>(`/campaigns/${campaignId}/preview`, {
+        method: "POST",
+        body: JSON.stringify({ step_id: stepId, lead_id: leadId }),
+      }),
   },
 };
