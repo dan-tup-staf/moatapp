@@ -146,7 +146,12 @@ export type PreviewResponse = {
 
 // ---------- Signals ----------
 
-export type SourceType = "rss" | "job_posting" | "news" | "tech_change";
+export type SourceType =
+  | "rss"
+  | "pracuj_pl"
+  | "job_posting"
+  | "news"
+  | "tech_change";
 
 export type SignalSource = {
   id: number;

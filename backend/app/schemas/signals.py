@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class SourceType(str, Enum):
     RSS = "rss"
+    PRACUJ_PL = "pracuj_pl"
     # placeholders for future scrapers
     JOB_POSTING = "job_posting"
     NEWS = "news"

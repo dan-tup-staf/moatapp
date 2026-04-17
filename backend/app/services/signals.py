@@ -126,17 +126,54 @@ async def delete_signal(db: AsyncSession, signal: Signal) -> None:
 # ---------- Lead linking ----------
 
 
-async def _link_signal_to_lead(
+_COMPANY_SUFFIXES = (
+    "spółka z ograniczoną odpowiedzialnością",
+    "sp. z o.o.",
+    "sp. z o. o.",
+    "sp.z o.o.",
+    "spółka akcyjna",
+    "s.a.",
+    "s. a.",
+    "sa",
+    "sp.",
+    "sp",
+    "ltd.",
+    "ltd",
+    "limited",
+    "inc.",
+    "inc",
+    "llc",
+    "gmbh",
+    "ag",
+    "co.",
+    "co",
+)
+
+
+def _normalize_company(name: str | None) -> str:
+    """Lowercase, strip common legal-entity suffixes, collapse whitespace.
+    Used to make 'WIRECO Poland sp. z o.o.' match 'WIRECO Poland'."""
+    if not name:
+        return ""
+    n = name.lower().strip()
+    # Iteratively peel off suffixes from the end (handles 'X sp. z o.o.')
+    changed = True
+    while changed:
+        changed = False
+        for sfx in _COMPANY_SUFFIXES:
+            if n.endswith(" " + sfx) or n == sfx:
+                n = n[: -len(sfx)].rstrip(" ,.;:-")
+                changed = True
+                break
+    return " ".join(n.split())
+
+
+async def _link_by_email_domain(
     db: AsyncSession, signal: Signal, source_user_id: int
 ) -> Lead | None:
-    """Find the first lead in the user's lists whose email domain matches
-    the signal's company_domain. If found, link them and bump score."""
-    if not signal.company_domain:
-        return None
-    domain = signal.company_domain.lower().strip()
+    domain = (signal.company_domain or "").lower().strip()
     if not domain:
         return None
-
     stmt = (
         select(Lead)
         .join(LeadList, Lead.list_id == LeadList.id)
@@ -146,8 +183,54 @@ async def _link_signal_to_lead(
         )
         .limit(1)
     )
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+async def _link_by_company_name(
+    db: AsyncSession,
+    signal: Signal,
+    source_user_id: int,
+    company_name: str,
+) -> Lead | None:
+    """Match by normalized company name. Pulls all the user's leads with
+    a non-empty company field and compares in Python — fine for ~thousands
+    of leads, simpler than building a SQL normalization function."""
+    target = _normalize_company(company_name)
+    if not target:
+        return None
+    stmt = (
+        select(Lead)
+        .join(LeadList, Lead.list_id == LeadList.id)
+        .where(
+            LeadList.user_id == source_user_id,
+            Lead.company.isnot(None),
+            Lead.company != "",
+        )
+    )
     result = await db.execute(stmt)
-    lead = result.scalar_one_or_none()
+    for lead in result.scalars():
+        if _normalize_company(lead.company) == target:
+            return lead
+    return None
+
+
+async def _link_signal_to_lead(
+    db: AsyncSession, signal: Signal, source_user_id: int
+) -> Lead | None:
+    """Try to attach a lead to this signal. Order:
+    1. Match by email-domain (signal.company_domain ↔ lower(split_part(email,'@',2)))
+    2. Match by normalized company name (signal.payload['company_name'] ↔ Lead.company)
+    Bumps lead.score by signal.score_weight on a hit."""
+    lead: Lead | None = None
+    if signal.company_domain:
+        lead = await _link_by_email_domain(db, signal, source_user_id)
+    if lead is None:
+        company_name = (signal.payload or {}).get("company_name")
+        if isinstance(company_name, str) and company_name.strip():
+            lead = await _link_by_company_name(
+                db, signal, source_user_id, company_name
+            )
+
     if lead is None:
         return None
 

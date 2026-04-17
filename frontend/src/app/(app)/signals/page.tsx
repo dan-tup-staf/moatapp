@@ -105,11 +105,48 @@ export default function SignalsPage() {
                       <p className="mt-1 font-medium text-gray-900">{s.title}</p>
                     )}
 
+                    {/* pracuj.pl-specific metadata */}
+                    {(typeof s.payload.workplace === "string" ||
+                      Array.isArray(s.payload.work_modes) ||
+                      Array.isArray(s.payload.contract_types)) && (
+                      <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
+                        {typeof s.payload.workplace === "string" &&
+                          s.payload.workplace && (
+                            <span>📍 {s.payload.workplace as string}</span>
+                          )}
+                        {Array.isArray(s.payload.work_modes) &&
+                          (s.payload.work_modes as string[]).length > 0 && (
+                            <span>
+                              🏢 {(s.payload.work_modes as string[]).join(", ")}
+                            </span>
+                          )}
+                        {Array.isArray(s.payload.contract_types) &&
+                          (s.payload.contract_types as string[]).length > 0 && (
+                            <span>
+                              📝{" "}
+                              {(s.payload.contract_types as string[]).join(
+                                ", ",
+                              )}
+                            </span>
+                          )}
+                      </div>
+                    )}
+
                     {typeof s.payload.summary === "string" && s.payload.summary && (
                       <p className="mt-1 line-clamp-2 text-sm text-gray-600">
                         {s.payload.summary as string}
                       </p>
                     )}
+
+                    {typeof s.payload.ai_summary === "string" &&
+                      s.payload.ai_summary && (
+                        <div
+                          className="mt-1 line-clamp-3 text-xs text-gray-600 [&_b]:font-semibold [&_li]:ml-4 [&_li]:list-disc"
+                          dangerouslySetInnerHTML={{
+                            __html: s.payload.ai_summary as string,
+                          }}
+                        />
+                      )}
 
                     {s.lead_email ? (
                       <p className="mt-2 text-xs text-emerald-700">
