@@ -55,12 +55,16 @@ async def analyze_url(
         )
 
     if manual:
-        # Użyj opisu ręcznego jako źródła prawdy (pomijamy scraping)
+        # Użyj opisu ręcznego jako źródła prawdy (pomijamy research)
         scraped = f"MANUAL DESCRIPTION:\n{manual}"
     else:
         try:
-            scraped = await svc.scrape_company_site(url_str)
+            scraped = await svc.research_company_with_llm(url_str)
+        except AnthropicNotConfigured as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
         except RuntimeError as e:
+            # Claude/web_search nie udało — pokaż jako 400 żeby UI przełączyło
+            # na fallback „Opis ręczny"
             raise HTTPException(status_code=400, detail=str(e)) from e
 
     try:

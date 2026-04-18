@@ -665,9 +665,9 @@ function IcpTab() {
           {useManual ? (
             <>
               <p className="text-xs text-gray-500">
-                Użyj, jeśli strona blokuje scraping (Cloudflare/anti-bot).
-                Opisz firmę w 3-6 zdaniach — co robicie, komu sprzedajecie,
-                czym się wyróżniacie.
+                Użyj dla firm niewidocznych w internecie albo gdy LLM research
+                nie znalazł informacji. Opisz firmę w 3-6 zdaniach — co
+                robicie, komu sprzedajecie, czym się wyróżniacie.
               </p>
               <textarea
                 required
@@ -681,9 +681,9 @@ function IcpTab() {
           ) : (
             <>
               <p className="text-xs text-gray-500">
-                Podaj link do strony swojej firmy — scraper ją przeczyta,
-                LLM wygeneruje pytania precyzujące ICP. Gdy strona blokuje
-                boty, przełącz na „Opis ręczny".
+                Podaj link — Claude przeszuka internet (strona, LinkedIn,
+                news, katalogi) i zbierze info o firmie. Jeśli firma jest
+                niewidoczna / LLM nie znajdzie — przełącz na „Opis ręczny".
               </p>
               <input
                 type="url"

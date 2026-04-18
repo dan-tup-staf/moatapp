@@ -1,20 +1,23 @@
 """ICP (Ideal Customer Profile) generator.
 
 Flow:
-  1. Scrape company URL → extract title/description/main text
-  2. Ask Claude to generate 4 clarifying questions
+  1. Ask Claude (with web_search tool) to research the company → 200-300 word summary
+  2. Ask Claude to generate 4 clarifying questions based on that summary
   3. After user answers → ask Claude to synthesize structured ICP fields
 
 Requires ANTHROPIC_API_KEY. Functions raise RuntimeError with a user-friendly
 message if the key is missing — handled at the route layer.
+
+Why LLM research not httpx scraping: Polish B2B sites (staffly.pl and many
+others) use Cloudflare Bot Fight Mode and block httpx with 403. Claude's
+server-side web_search bypasses this — search + synthesis happen on Anthropic's
+infra. Manual description path stays as fallback for fully-private sites.
 """
 
 import json
 import logging
 import re
 
-import httpx
-from bs4 import BeautifulSoup
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,73 +40,61 @@ def _require_key() -> str:
     return settings.anthropic_api_key
 
 
-# ---------- Scraping ----------
+# ---------- Company research (LLM + web_search) ----------
 
 
-_BROWSER_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    ),
-    "Accept": (
-        "text/html,application/xhtml+xml,application/xml;q=0.9,"
-        "image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
-    ),
-    "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Accept-Encoding": "gzip, deflate, br",
-    "DNT": "1",
-    "Upgrade-Insecure-Requests": "1",
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "none",
-    "Sec-Fetch-User": "?1",
-    "sec-ch-ua": (
-        '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"'
-    ),
-    "sec-ch-ua-mobile": "?0",
-    "sec-ch-ua-platform": '"macOS"',
-    "Cache-Control": "max-age=0",
-}
+async def research_company_with_llm(url: str) -> str:
+    """Research a company by URL using Claude + server-side web_search tool.
+    Replaces the legacy httpx scraping path — works around Cloudflare bot
+    protection because searches happen on Anthropic's infrastructure.
 
+    Returns 200-300 word Polish summary ready for question generation."""
+    from anthropic import AsyncAnthropic
 
-async def scrape_company_site(url: str) -> str:
-    """Fetch URL, extract title + meta description + first ~2000 chars of
-    visible text. Handles malformed HTML, timeouts, 4xx/5xx gracefully.
-    Uwaga: strony z Cloudflare Bot Fight Mode (JS challenge) i tak
-    zwrócą 403 — user dostaje fallback do ręcznego opisu."""
-    async with httpx.AsyncClient(
-        timeout=15,
-        follow_redirects=True,
-        headers=_BROWSER_HEADERS,
-    ) as client:
-        try:
-            r = await client.get(url)
-            r.raise_for_status()
-        except httpx.HTTPError as e:
-            raise RuntimeError(f"Nie udało się pobrać strony: {e}") from e
+    client = AsyncAnthropic(api_key=_require_key())
+    try:
+        response = await client.messages.create(
+            model=settings.anthropic_model_fast,
+            max_tokens=1500,
+            tools=[{"type": "web_search_20260209", "name": "web_search"}],
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        f"Zbadaj firmę pod tym URL: {url}\n\n"
+                        "Wyszukaj w internecie (strona, LinkedIn, news, "
+                        "katalogi firm) i zwróć 200-300 słów po polsku w "
+                        "strukturze:\n"
+                        "- Co firma robi (produkt/usługa)\n"
+                        "- Branża i target market\n"
+                        "- Wielkość firmy jeśli możliwa do ustalenia\n"
+                        "- Kluczowe oferty / flagowe produkty\n"
+                        "- Typowi klienci / buyer persona\n\n"
+                        "Konkretnie, bez marketingowych ozdobników. Jeśli nie "
+                        "znajdziesz jakiejś informacji — napisz wprost czego "
+                        "brakuje, nie zmyślaj."
+                    ),
+                }
+            ],
+        )
+    except Exception as e:
+        logger.exception("Claude research failed for %s", url)
+        raise RuntimeError(
+            f"Claude research nie powiodł się: {type(e).__name__}: {e}"
+        ) from e
 
-    soup = BeautifulSoup(r.text, "html.parser")
-
-    parts: list[str] = []
-    if soup.title and soup.title.string:
-        parts.append(f"TITLE: {soup.title.string.strip()}")
-
-    meta_desc = soup.find("meta", attrs={"name": "description"})
-    if meta_desc and meta_desc.get("content"):
-        parts.append(f"META: {meta_desc['content'].strip()}")
-
-    og_desc = soup.find("meta", attrs={"property": "og:description"})
-    if og_desc and og_desc.get("content"):
-        parts.append(f"OG: {og_desc['content'].strip()}")
-
-    # Strip script/style, collapse whitespace
-    for s in soup(["script", "style", "noscript", "nav", "footer"]):
-        s.decompose()
-    text = soup.get_text(separator=" ", strip=True)
-    text = re.sub(r"\s+", " ", text)[:2500]
-    parts.append(f"BODY: {text}")
-
-    return "\n\n".join(parts)
+    # Response ma interleaved blocks:
+    # [text (opt. "Będę szukać..."), server_tool_use, web_search_tool_result, text (synthesis)]
+    # Zbieramy wszystkie text blocks; final synthesis jest ostatni.
+    texts = [
+        b.text.strip() for b in response.content if b.type == "text" and b.text.strip()
+    ]
+    if not texts:
+        raise RuntimeError(
+            "Claude nie zwrócił tekstu — prawdopodobnie web_search nie "
+            "znalazł nic o tej firmie. Uzyj opcji Opis reczny."
+        )
+    return "\n\n".join(texts)
 
 
 # ---------- Claude calls ----------
