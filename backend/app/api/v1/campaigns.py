@@ -9,6 +9,7 @@ from app.models.user import User
 from app.schemas.campaigns import (
     CampaignCreate,
     CampaignRead,
+    CampaignStats,
     CampaignUpdate,
     EnrollFromList,
     EnrollmentRead,
@@ -219,6 +220,17 @@ async def unenroll(
 
 
 # ---------- Preview ----------
+
+
+@router.get("/{campaign_id}/stats", response_model=CampaignStats)
+async def get_stats(
+    campaign_id: int,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CampaignStats:
+    await _ensure_owned_campaign(db, current, campaign_id)
+    data = await svc.get_campaign_stats(db, campaign_id)
+    return CampaignStats(**data)
 
 
 @router.post("/{campaign_id}/send-due-now")

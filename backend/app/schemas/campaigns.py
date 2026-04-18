@@ -117,3 +117,31 @@ class PreviewRequest(BaseModel):
 class PreviewResponse(BaseModel):
     subject: str
     body: str
+
+
+# ---------- Campaign stats ----------
+
+
+class StepStats(BaseModel):
+    step_id: int
+    step_order: int
+    sent_count: int
+    failed_count: int
+
+
+class EnrollmentsBreakdown(BaseModel):
+    total: int
+    active: int
+    completed: int
+    paused: int
+    replied: int
+    bounced: int
+
+
+class CampaignStats(BaseModel):
+    """Per-step + overall metrics for the lemlist-style detail view."""
+
+    enrollments: EnrollmentsBreakdown
+    messages_sent_total: int
+    messages_failed_total: int
+    steps: list[StepStats]

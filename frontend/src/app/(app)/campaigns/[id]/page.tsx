@@ -2,17 +2,19 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import {
   api,
   ApiError,
   Campaign,
+  CampaignStats,
   CampaignStatus,
   Enrollment,
   LeadList,
   PreviewResponse,
   SequenceStep,
+  StepStats,
 } from "@/lib/api-client";
 
 const STATUS_OPTIONS: CampaignStatus[] = [
@@ -21,6 +23,20 @@ const STATUS_OPTIONS: CampaignStatus[] = [
   "paused",
   "archived",
 ];
+
+const STATUS_STYLES: Record<CampaignStatus, string> = {
+  draft: "bg-gray-100 text-gray-700",
+  active: "bg-emerald-100 text-emerald-800",
+  paused: "bg-amber-100 text-amber-800",
+  archived: "bg-gray-100 text-gray-500",
+};
+
+const STATUS_LABELS: Record<CampaignStatus, string> = {
+  draft: "Draft",
+  active: "Aktywna",
+  paused: "Pauza",
+  archived: "Archiwum",
+};
 
 export default function CampaignDetailPage() {
   const params = useParams<{ id: string }>();
@@ -31,58 +47,42 @@ export default function CampaignDetailPage() {
   const [steps, setSteps] = useState<SequenceStep[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [lists, setLists] = useState<LeadList[]>([]);
+  const [stats, setStats] = useState<CampaignStats | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Campaign metadata edit
-  const [name, setName] = useState("");
-  const [fromEmail, setFromEmail] = useState("");
-  const [fromName, setFromName] = useState("");
-  const [campaignStatus, setCampaignStatus] = useState<CampaignStatus>("draft");
-  const [savingMeta, setSavingMeta] = useState(false);
-  const [metaError, setMetaError] = useState<string | null>(null);
+  const [selectedStepId, setSelectedStepId] = useState<number | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showEnrollments, setShowEnrollments] = useState(false);
 
-  // New step form
-  const [newSubject, setNewSubject] = useState("");
-  const [newBody, setNewBody] = useState("");
-  const [newDelay, setNewDelay] = useState(0);
-  const [addingStep, setAddingStep] = useState(false);
-  const [stepError, setStepError] = useState<string | null>(null);
+  // Send-due state
+  const [sending, setSending] = useState(false);
+  const [sendMsg, setSendMsg] = useState<string | null>(null);
 
-  // Enroll
+  // Enroll state
   const [enrollListId, setEnrollListId] = useState<number | "">("");
   const [enrolling, setEnrolling] = useState(false);
   const [enrollMsg, setEnrollMsg] = useState<string | null>(null);
 
-  // Send due now
-  const [sending, setSending] = useState(false);
-  const [sendMsg, setSendMsg] = useState<string | null>(null);
-
-  // Preview
-  const [previewStepId, setPreviewStepId] = useState<number | "">("");
-  const [previewLeadId, setPreviewLeadId] = useState<number | "">("");
-  const [preview, setPreview] = useState<PreviewResponse | null>(null);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-
   async function refresh() {
     try {
-      const [c, s, e, l] = await Promise.all([
+      const [c, s, e, l, st] = await Promise.all([
         api.campaigns.get(campaignId),
         api.campaigns.listSteps(campaignId),
         api.campaigns.listEnrollments(campaignId),
         api.lists.list(),
+        api.campaigns.stats(campaignId),
       ]);
       setCampaign(c);
       setSteps(s);
       setEnrollments(e);
       setLists(l);
-      setName(c.name);
-      setFromEmail(c.from_email);
-      setFromName(c.from_name ?? "");
-      setCampaignStatus(c.status);
+      setStats(st);
+      if (s.length > 0 && selectedStepId === null) {
+        setSelectedStepId(s[0].id);
+      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         router.replace("/campaigns");
-        return;
       }
     } finally {
       setLoading(false);
@@ -94,81 +94,12 @@ export default function CampaignDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaignId]);
 
-  async function handleSaveMeta(e: FormEvent) {
-    e.preventDefault();
-    setMetaError(null);
-    setSavingMeta(true);
+  async function handleStatusToggle() {
+    if (!campaign) return;
+    const next: CampaignStatus =
+      campaign.status === "active" ? "paused" : "active";
     try {
-      await api.campaigns.update(campaignId, {
-        name,
-        from_email: fromEmail,
-        from_name: fromName || undefined,
-        status: campaignStatus,
-      });
-      await refresh();
-    } catch (err) {
-      setMetaError(err instanceof ApiError ? err.detail : "Błąd zapisu");
-    } finally {
-      setSavingMeta(false);
-    }
-  }
-
-  async function handleAddStep(e: FormEvent) {
-    e.preventDefault();
-    setStepError(null);
-    setAddingStep(true);
-    try {
-      await api.campaigns.createStep(campaignId, {
-        step_order: steps.length,
-        subject: newSubject,
-        body_template: newBody,
-        delay_days: newDelay,
-      });
-      setNewSubject("");
-      setNewBody("");
-      setNewDelay(0);
-      await refresh();
-    } catch (err) {
-      setStepError(err instanceof ApiError ? err.detail : "Błąd dodawania");
-    } finally {
-      setAddingStep(false);
-    }
-  }
-
-  async function handleDeleteStep(stepId: number) {
-    if (!window.confirm("Usunąć ten step?")) return;
-    try {
-      await api.campaigns.deleteStep(campaignId, stepId);
-      await refresh();
-    } catch (err) {
-      alert(err instanceof ApiError ? err.detail : "Błąd");
-    }
-  }
-
-  async function handleEnroll(e: FormEvent) {
-    e.preventDefault();
-    if (enrollListId === "") return;
-    setEnrolling(true);
-    setEnrollMsg(null);
-    try {
-      const result = await api.campaigns.enrollFromList(
-        campaignId,
-        Number(enrollListId),
-      );
-      setEnrollMsg(
-        `Zapisano: ${result.enrolled}, pominięto duplikaty: ${result.skipped_already_enrolled}`,
-      );
-      await refresh();
-    } catch (err) {
-      setEnrollMsg(err instanceof ApiError ? `Błąd: ${err.detail}` : "Błąd");
-    } finally {
-      setEnrolling(false);
-    }
-  }
-
-  async function handleUnenroll(enrollmentId: number) {
-    try {
-      await api.campaigns.unenroll(campaignId, enrollmentId);
+      await api.campaigns.update(campaignId, { status: next });
       await refresh();
     } catch (err) {
       alert(err instanceof ApiError ? err.detail : "Błąd");
@@ -179,10 +110,10 @@ export default function CampaignDetailPage() {
     setSending(true);
     setSendMsg(null);
     try {
-      const result = await api.campaigns.sendDueNow(campaignId);
+      const r = await api.campaigns.sendDueNow(campaignId);
       setSendMsg(
-        result.processed > 0
-          ? `Wysłano ${result.processed} maili. Sprawdź Mailhog: http://localhost:8025`
+        r.processed > 0
+          ? `Wysłano ${r.processed} maili (zobacz Mailhog :8025)`
           : "Brak enrollmentów gotowych do wysyłki (next_send_at > now())",
       );
       await refresh();
@@ -193,30 +124,57 @@ export default function CampaignDetailPage() {
     }
   }
 
-  async function handlePreview(e: FormEvent) {
+  async function handleEnroll(e: FormEvent) {
     e.preventDefault();
-    if (previewStepId === "" || previewLeadId === "") return;
-    setPreviewError(null);
-    setPreview(null);
+    if (enrollListId === "") return;
+    setEnrolling(true);
+    setEnrollMsg(null);
     try {
-      const p = await api.campaigns.preview(
+      const r = await api.campaigns.enrollFromList(
         campaignId,
-        Number(previewStepId),
-        Number(previewLeadId),
+        Number(enrollListId),
       );
-      setPreview(p);
+      setEnrollMsg(
+        `Zapisano ${r.enrolled}, pominięto duplikaty ${r.skipped_already_enrolled}`,
+      );
+      await refresh();
     } catch (err) {
-      setPreviewError(
-        err instanceof ApiError ? err.detail : "Błąd renderu preview",
-      );
+      setEnrollMsg(err instanceof ApiError ? `Błąd: ${err.detail}` : "Błąd");
+    } finally {
+      setEnrolling(false);
     }
   }
+
+  async function handleUnenroll(id: number) {
+    try {
+      await api.campaigns.unenroll(campaignId, id);
+      await refresh();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.detail : "Błąd");
+    }
+  }
+
+  const statsByStepId = useMemo(() => {
+    const m = new Map<number, StepStats>();
+    stats?.steps.forEach((s) => m.set(s.step_id, s));
+    return m;
+  }, [stats]);
+
+  const selectedStep = useMemo(
+    () => steps.find((s) => s.id === selectedStepId) ?? null,
+    [steps, selectedStepId],
+  );
 
   if (loading) return <p className="text-sm text-gray-500">Ładowanie...</p>;
   if (!campaign) return null;
 
+  const statusStyle = STATUS_STYLES[campaign.status];
+  const canToggle =
+    campaign.status === "active" || campaign.status === "paused";
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* Header */}
       <div>
         <Link
           href="/campaigns"
@@ -224,369 +182,595 @@ export default function CampaignDetailPage() {
         >
           ← Wszystkie kampanie
         </Link>
-        <h2 className="mt-1 text-2xl font-bold tracking-tight">
-          {campaign.name}
-        </h2>
-        <p className="mt-1 text-sm text-gray-400">
-          {steps.length} {steps.length === 1 ? "step" : "stepów"} •{" "}
-          {enrollments.length}{" "}
-          {enrollments.length === 1 ? "enrollment" : "enrollmentów"}
-        </p>
+        <div className="mt-1 flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h2 className="truncate text-2xl font-bold tracking-tight">
+                {campaign.name}
+              </h2>
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs ${statusStyle}`}
+              >
+                {STATUS_LABELS[campaign.status]}
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-gray-500">
+              {campaign.from_name
+                ? `${campaign.from_name} <${campaign.from_email}>`
+                : campaign.from_email}
+            </p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            {canToggle && (
+              <button
+                onClick={handleStatusToggle}
+                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-100"
+              >
+                {campaign.status === "active" ? "⏸ Pauza" : "▶ Aktywuj"}
+              </button>
+            )}
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-100"
+            >
+              Ustawienia
+            </button>
+          </div>
+        </div>
+
+        {/* Stat strip */}
+        {stats && (
+          <div className="mt-4 grid grid-cols-2 gap-3 rounded-lg border border-gray-200 bg-white p-3 sm:grid-cols-4 md:grid-cols-6">
+            <MiniStat label="Stepów" value={steps.length} />
+            <MiniStat
+              label="Enrollmentów"
+              value={stats.enrollments.total}
+            />
+            <MiniStat
+              label="Aktywnych"
+              value={stats.enrollments.active}
+            />
+            <MiniStat
+              label="Ukończonych"
+              value={stats.enrollments.completed}
+            />
+            <MiniStat
+              label="Wysłanych"
+              value={stats.messages_sent_total}
+              highlight
+            />
+            <MiniStat
+              label="Błędów"
+              value={stats.messages_failed_total}
+              muted={stats.messages_failed_total === 0}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Campaign metadata */}
-      <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <h3 className="mb-3 text-sm font-medium text-gray-700">
-          Ustawienia kampanii
-        </h3>
-        <form onSubmit={handleSaveMeta} className="space-y-3">
-          <input
-            type="text"
-            required
-            placeholder="Nazwa"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-          />
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <input
-              type="email"
-              required
-              placeholder="from email"
-              value={fromEmail}
-              onChange={(e) => setFromEmail(e.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-            />
-            <input
-              type="text"
-              placeholder="from name"
-              value={fromName}
-              onChange={(e) => setFromName(e.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+      {/* Settings panel (collapsible) */}
+      {showSettings && (
+        <SettingsPanel
+          campaign={campaign}
+          onSaved={refresh}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {/* Steps timeline */}
+      <section className="rounded-lg border border-gray-200 bg-white">
+        <div className="border-b border-gray-200 p-4">
+          <h3 className="text-sm font-medium text-gray-700">Sekwencja</h3>
+        </div>
+        <div className="overflow-x-auto p-4">
+          <div className="flex min-w-min items-stretch gap-3">
+            {steps.length === 0 && (
+              <p className="py-2 text-sm text-gray-500">
+                Brak stepów — dodaj pierwszy po prawej.
+              </p>
+            )}
+            {steps.map((step, i) => (
+              <div key={step.id} className="flex items-center gap-3">
+                <StepCardCompact
+                  step={step}
+                  stats={statsByStepId.get(step.id) ?? null}
+                  active={selectedStepId === step.id}
+                  isFirst={i === 0}
+                  onClick={() => setSelectedStepId(step.id)}
+                />
+                {i < steps.length - 1 && (
+                  <span className="text-xl text-gray-300">→</span>
+                )}
+              </div>
+            ))}
+            {steps.length > 0 && (
+              <span className="text-xl text-gray-300">→</span>
+            )}
+            <AddStepButton
+              campaignId={campaignId}
+              nextOrder={steps.length}
+              onCreated={async (newId) => {
+                await refresh();
+                setSelectedStepId(newId);
+              }}
             />
           </div>
-          <select
-            value={campaignStatus}
-            onChange={(e) =>
-              setCampaignStatus(e.target.value as CampaignStatus)
-            }
-            className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-          >
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-          {metaError && (
-            <p className="text-sm text-red-600">{metaError}</p>
-          )}
-          <button
-            disabled={savingMeta}
-            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-          >
-            {savingMeta ? "Zapisywanie..." : "Zapisz zmiany"}
-          </button>
-        </form>
-      </section>
+        </div>
 
-      {/* Steps */}
-      <section className="space-y-3">
-        <h3 className="text-sm font-medium text-gray-700">Sekwencja stepów</h3>
-
-        {steps.length === 0 ? (
-          <p className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-500">
-            Brak stepów. Dodaj pierwszy poniżej.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {steps.map((s) => (
-              <StepCard
-                key={s.id}
-                step={s}
-                campaignId={campaignId}
-                onChanged={refresh}
-                onDelete={() => handleDeleteStep(s.id)}
-              />
-            ))}
+        {/* Step editor */}
+        {selectedStep && (
+          <div className="border-t border-gray-200 p-4">
+            <StepEditor
+              key={selectedStep.id}
+              step={selectedStep}
+              campaignId={campaignId}
+              stats={statsByStepId.get(selectedStep.id) ?? null}
+              onSaved={refresh}
+              onDeleted={async () => {
+                setSelectedStepId(null);
+                await refresh();
+              }}
+            />
           </div>
         )}
-
-        {/* Add step form */}
-        <form
-          onSubmit={handleAddStep}
-          className="space-y-3 rounded-lg border border-dashed border-gray-300 bg-white p-4"
-        >
-          <h4 className="text-sm font-medium text-gray-700">
-            Dodaj step #{steps.length}
-          </h4>
-          <input
-            type="text"
-            required
-            placeholder="Subject (np. Quick question, {{first_name}})"
-            value={newSubject}
-            onChange={(e) => setNewSubject(e.target.value)}
-            className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
-          />
-          <textarea
-            required
-            placeholder="Body — używaj {{first_name}}, {{last_name}}, {{company}}, {{title}}, {{email}}"
-            value={newBody}
-            onChange={(e) => setNewBody(e.target.value)}
-            rows={6}
-            className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
-          />
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-700">Delay (dni):</label>
-            <input
-              type="number"
-              min={0}
-              max={365}
-              value={newDelay}
-              onChange={(e) => setNewDelay(Number(e.target.value))}
-              className="w-20 rounded-md border border-gray-300 px-3 py-2 text-sm"
-            />
-            <span className="text-xs text-gray-500">
-              {steps.length === 0
-                ? "od enrollmentu"
-                : "od poprzedniego stepa"}
-            </span>
-          </div>
-          {stepError && <p className="text-sm text-red-600">{stepError}</p>}
-          <button
-            disabled={addingStep}
-            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-          >
-            {addingStep ? "Dodawanie..." : "Dodaj step"}
-          </button>
-        </form>
       </section>
 
-      {/* Enrollment */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
+      {/* Enrollments */}
+      <section className="rounded-lg border border-gray-200 bg-white">
+        <button
+          onClick={() => setShowEnrollments(!showEnrollments)}
+          className="flex w-full items-center justify-between border-b border-gray-200 p-4 text-left hover:bg-gray-50"
+        >
           <h3 className="text-sm font-medium text-gray-700">
-            Enrollment leadów
+            Enrollment leadów{" "}
+            <span className="text-xs font-normal text-gray-500">
+              ({enrollments.length})
+            </span>
           </h3>
-          <button
-            onClick={handleSendDueNow}
-            disabled={sending || enrollments.length === 0}
-            className="rounded-md border border-gray-900 bg-white px-3 py-1 text-xs font-medium text-gray-900 hover:bg-gray-100 disabled:opacity-50"
-            title="Wymuś wysyłkę wszystkich enrollmentów z next_send_at <= now() (zwykle worker robi to co minutę)"
-          >
-            {sending ? "Wysyłanie..." : "Wyślij due teraz"}
-          </button>
-        </div>
-        {sendMsg && (
-          <p className="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">
-            {sendMsg}
-          </p>
-        )}
+          <span className="text-gray-400">{showEnrollments ? "▾" : "▸"}</span>
+        </button>
 
-        <form
-          onSubmit={handleEnroll}
-          className="flex items-end gap-3 rounded-lg border border-gray-200 bg-white p-4"
-        >
-          <div className="flex-1">
-            <label className="block text-xs font-medium text-gray-700">
-              Wybierz listę
-            </label>
-            <select
-              value={enrollListId}
-              onChange={(e) =>
-                setEnrollListId(
-                  e.target.value === "" ? "" : Number(e.target.value),
-                )
-              }
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            >
-              <option value="">— wybierz —</option>
-              {lists.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name} ({l.leads_count} leadów)
-                </option>
-              ))}
-            </select>
+        {showEnrollments && (
+          <div className="space-y-3 p-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <form onSubmit={handleEnroll} className="flex items-end gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700">
+                    Wybierz listę
+                  </label>
+                  <select
+                    value={enrollListId}
+                    onChange={(e) =>
+                      setEnrollListId(
+                        e.target.value === ""
+                          ? ""
+                          : Number(e.target.value),
+                      )
+                    }
+                    className="mt-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+                  >
+                    <option value="">— wybierz —</option>
+                    {lists.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name} ({l.leads_count})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="submit"
+                  disabled={enrollListId === "" || enrolling}
+                  className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-800 disabled:opacity-50"
+                >
+                  {enrolling ? "Zapisuję..." : "Zapisz wszystkich"}
+                </button>
+              </form>
+
+              <button
+                onClick={handleSendDueNow}
+                disabled={sending || enrollments.length === 0}
+                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-100 disabled:opacity-50"
+                title="Wyślij enrollmenty z next_send_at <= now()"
+              >
+                {sending ? "Wysyłam..." : "Wyślij due teraz"}
+              </button>
+            </div>
+
+            {enrollMsg && (
+              <p className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-700">
+                {enrollMsg}
+              </p>
+            )}
+            {sendMsg && (
+              <p className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-700">
+                {sendMsg}
+              </p>
+            )}
+
+            {enrollments.length === 0 ? (
+              <p className="text-sm text-gray-500">Brak enrollmentów.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium text-gray-700">
+                        Lead
+                      </th>
+                      <th className="px-3 py-2 text-left font-medium text-gray-700">
+                        Firma
+                      </th>
+                      <th className="px-3 py-2 text-left font-medium text-gray-700">
+                        Status
+                      </th>
+                      <th className="px-3 py-2 text-right font-medium text-gray-700">
+                        Step
+                      </th>
+                      <th className="px-3 py-2 text-left font-medium text-gray-700">
+                        Następna wysyłka
+                      </th>
+                      <th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {enrollments.map((e) => (
+                      <tr key={e.id} className="hover:bg-gray-50">
+                        <td className="px-3 py-2">
+                          <div className="text-gray-900">{e.lead_email}</div>
+                          {e.lead_name && (
+                            <div className="text-xs text-gray-500">
+                              {e.lead_name}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-gray-700">
+                          {e.lead_company || "—"}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs">
+                            {e.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono">
+                          {e.current_step}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-gray-600">
+                          {e.next_send_at
+                            ? new Date(e.next_send_at).toLocaleString("pl-PL")
+                            : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            onClick={() => handleUnenroll(e.id)}
+                            className="text-xs text-red-600 hover:underline"
+                          >
+                            Usuń
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-          <button
-            type="submit"
-            disabled={enrollListId === "" || enrolling}
-            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-          >
-            {enrolling ? "Zapisuję..." : "Zapisz wszystkich"}
-          </button>
-        </form>
-        {enrollMsg && (
-          <p className="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">
-            {enrollMsg}
-          </p>
         )}
-
-        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-          {enrollments.length === 0 ? (
-            <p className="p-4 text-sm text-gray-500">Brak enrollmentów.</p>
-          ) : (
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-2 text-left font-medium text-gray-700">
-                    Lead
-                  </th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-700">
-                    Firma
-                  </th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-700">
-                    Status
-                  </th>
-                  <th className="px-4 py-2 text-right font-medium text-gray-700">
-                    Step
-                  </th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-700">
-                    Następna wysyłka
-                  </th>
-                  <th className="px-4 py-2"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {enrollments.map((e) => (
-                  <tr key={e.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-2">
-                      <div className="text-gray-900">{e.lead_email}</div>
-                      {e.lead_name && (
-                        <div className="text-xs text-gray-500">
-                          {e.lead_name}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-gray-700">
-                      {e.lead_company || "—"}
-                    </td>
-                    <td className="px-4 py-2">
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs">
-                        {e.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-right font-mono text-gray-900">
-                      {e.current_step}
-                    </td>
-                    <td className="px-4 py-2 text-xs text-gray-600">
-                      {e.next_send_at
-                        ? new Date(e.next_send_at).toLocaleString("pl-PL")
-                        : "—"}
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <button
-                        onClick={() => handleUnenroll(e.id)}
-                        className="text-xs text-red-600 hover:underline"
-                      >
-                        Usuń
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
       </section>
 
       {/* Preview */}
       {steps.length > 0 && enrollments.length > 0 && (
-        <section className="space-y-3">
-          <h3 className="text-sm font-medium text-gray-700">
-            Preview szablonu
-          </h3>
-          <form
-            onSubmit={handlePreview}
-            className="flex items-end gap-3 rounded-lg border border-gray-200 bg-white p-4"
-          >
-            <div className="flex-1">
-              <label className="block text-xs font-medium text-gray-700">
-                Step
-              </label>
-              <select
-                value={previewStepId}
-                onChange={(e) =>
-                  setPreviewStepId(
-                    e.target.value === "" ? "" : Number(e.target.value),
-                  )
-                }
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-              >
-                <option value="">— wybierz step —</option>
-                {steps.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    [{s.step_order}] {s.subject}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex-1">
-              <label className="block text-xs font-medium text-gray-700">
-                Lead
-              </label>
-              <select
-                value={previewLeadId}
-                onChange={(e) =>
-                  setPreviewLeadId(
-                    e.target.value === "" ? "" : Number(e.target.value),
-                  )
-                }
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-              >
-                <option value="">— wybierz lead —</option>
-                {enrollments.map((e) => (
-                  <option key={e.lead_id} value={e.lead_id}>
-                    {e.lead_email}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button
-              type="submit"
-              disabled={previewStepId === "" || previewLeadId === ""}
-              className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-            >
-              Renderuj
-            </button>
-          </form>
-
-          {previewError && (
-            <p className="text-sm text-red-600">{previewError}</p>
-          )}
-
-          {preview && (
-            <div className="rounded-lg border border-gray-200 bg-white p-4">
-              <p className="text-xs font-medium text-gray-500">SUBJECT</p>
-              <p className="mt-1 font-medium text-gray-900">
-                {preview.subject}
-              </p>
-              <p className="mt-3 text-xs font-medium text-gray-500">BODY</p>
-              <pre className="mt-1 whitespace-pre-wrap font-mono text-sm text-gray-900">
-                {preview.body}
-              </pre>
-            </div>
-          )}
-        </section>
+        <PreviewSection
+          campaignId={campaignId}
+          steps={steps}
+          enrollments={enrollments}
+        />
       )}
     </div>
   );
 }
 
-// ---------- Step card component ----------
+// ---------- Small pieces ----------
 
-function StepCard({
+function MiniStat({
+  label,
+  value,
+  highlight = false,
+  muted = false,
+}: {
+  label: string;
+  value: number;
+  highlight?: boolean;
+  muted?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-xs font-medium uppercase text-gray-500">{label}</p>
+      <p
+        className={
+          "mt-0.5 text-xl font-bold " +
+          (highlight
+            ? "text-emerald-700"
+            : muted
+              ? "text-gray-400"
+              : "text-gray-900")
+        }
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function SettingsPanel({
+  campaign,
+  onSaved,
+  onClose,
+}: {
+  campaign: Campaign;
+  onSaved: () => Promise<void>;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(campaign.name);
+  const [fromEmail, setFromEmail] = useState(campaign.from_email);
+  const [fromName, setFromName] = useState(campaign.from_name ?? "");
+  const [status, setStatus] = useState<CampaignStatus>(campaign.status);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await api.campaigns.update(campaign.id, {
+        name,
+        from_email: fromEmail,
+        from_name: fromName || undefined,
+        status,
+      });
+      await onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Błąd zapisu");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form
+      onSubmit={handleSave}
+      className="space-y-3 rounded-lg border border-gray-200 bg-white p-4"
+    >
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium text-gray-700">
+          Ustawienia kampanii
+        </h3>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-xs text-gray-500 hover:text-gray-900"
+        >
+          Zwiń
+        </button>
+      </div>
+      <input
+        type="text"
+        required
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Nazwa"
+        className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+      />
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <input
+          type="email"
+          required
+          value={fromEmail}
+          onChange={(e) => setFromEmail(e.target.value)}
+          placeholder="from email"
+          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+        />
+        <input
+          type="text"
+          value={fromName}
+          onChange={(e) => setFromName(e.target.value)}
+          placeholder="from name"
+          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <select
+        value={status}
+        onChange={(e) => setStatus(e.target.value as CampaignStatus)}
+        className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+      >
+        {STATUS_OPTIONS.map((s) => (
+          <option key={s} value={s}>
+            {STATUS_LABELS[s]}
+          </option>
+        ))}
+      </select>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button
+        disabled={saving}
+        className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+      >
+        {saving ? "Zapisywanie..." : "Zapisz"}
+      </button>
+    </form>
+  );
+}
+
+function StepCardCompact({
+  step,
+  stats,
+  active,
+  isFirst,
+  onClick,
+}: {
+  step: SequenceStep;
+  stats: StepStats | null;
+  active: boolean;
+  isFirst: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={
+        "w-60 shrink-0 rounded-lg border p-3 text-left transition " +
+        (active
+          ? "border-gray-900 bg-white shadow-sm ring-2 ring-gray-900/10"
+          : "border-gray-200 bg-white hover:border-gray-400")
+      }
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium uppercase text-gray-500">
+          Step {step.step_order}
+        </span>
+        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
+          {isFirst ? "od enrollmentu" : "+"}
+          {step.delay_days}
+          {"d"}
+        </span>
+      </div>
+      <p className="mt-2 line-clamp-2 text-sm font-medium text-gray-900">
+        {step.subject}
+      </p>
+      <p className="mt-1 line-clamp-2 whitespace-pre-wrap font-mono text-xs text-gray-500">
+        {step.body_template}
+      </p>
+      <div className="mt-2 flex items-center gap-3 text-xs">
+        <span className="text-emerald-700">
+          ✓ {stats?.sent_count ?? 0}
+        </span>
+        {stats && stats.failed_count > 0 && (
+          <span className="text-red-600">✗ {stats.failed_count}</span>
+        )}
+      </div>
+    </button>
+  );
+}
+
+function AddStepButton({
+  campaignId,
+  nextOrder,
+  onCreated,
+}: {
+  campaignId: number;
+  nextOrder: number;
+  onCreated: (id: number) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [delay, setDelay] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function handleCreate(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setErr(null);
+    try {
+      const created = await api.campaigns.createStep(campaignId, {
+        step_order: nextOrder,
+        subject,
+        body_template: body,
+        delay_days: delay,
+      });
+      setSubject("");
+      setBody("");
+      setDelay(0);
+      setOpen(false);
+      await onCreated(created.id);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.detail : "Błąd");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="flex w-40 shrink-0 flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 p-3 text-sm text-gray-500 hover:border-gray-500 hover:text-gray-900"
+      >
+        <span className="text-2xl">+</span>
+        Dodaj step
+      </button>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={handleCreate}
+      className="w-72 shrink-0 space-y-2 rounded-lg border border-gray-900 bg-white p-3"
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-gray-700">
+          Nowy step #{nextOrder}
+        </span>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="text-xs text-gray-500 hover:text-gray-900"
+        >
+          ✕
+        </button>
+      </div>
+      <input
+        type="text"
+        required
+        value={subject}
+        onChange={(e) => setSubject(e.target.value)}
+        placeholder="Subject (np. Quick q, {{first_name}})"
+        className="block w-full rounded-md border border-gray-300 px-2 py-1 text-xs font-mono"
+      />
+      <textarea
+        required
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        rows={4}
+        placeholder="Body — {{first_name}} {{company}} ..."
+        className="block w-full rounded-md border border-gray-300 px-2 py-1 text-xs font-mono"
+      />
+      <div className="flex items-center gap-2">
+        <label className="text-xs text-gray-600">Delay (dni):</label>
+        <input
+          type="number"
+          min={0}
+          max={365}
+          value={delay}
+          onChange={(e) => setDelay(Number(e.target.value))}
+          className="w-16 rounded-md border border-gray-300 px-2 py-1 text-xs"
+        />
+      </div>
+      {err && <p className="text-xs text-red-600">{err}</p>}
+      <button
+        disabled={saving}
+        className="w-full rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+      >
+        {saving ? "..." : "Dodaj"}
+      </button>
+    </form>
+  );
+}
+
+function StepEditor({
   step,
   campaignId,
-  onChanged,
-  onDelete,
+  stats,
+  onSaved,
+  onDeleted,
 }: {
   step: SequenceStep;
   campaignId: number;
-  onChanged: () => Promise<void>;
-  onDelete: () => void;
+  stats: StepStats | null;
+  onSaved: () => Promise<void>;
+  onDeleted: () => Promise<void>;
 }) {
-  const [editing, setEditing] = useState(false);
   const [subject, setSubject] = useState(step.subject);
   const [body, setBody] = useState(step.body_template);
   const [delay, setDelay] = useState(step.delay_days);
@@ -601,8 +785,7 @@ function StepCard({
         body_template: body,
         delay_days: delay,
       });
-      setEditing(false);
-      await onChanged();
+      await onSaved();
     } catch (err) {
       alert(err instanceof ApiError ? err.detail : "Błąd");
     } finally {
@@ -610,73 +793,181 @@ function StepCard({
     }
   }
 
+  async function handleDelete() {
+    if (!window.confirm("Usunąć ten step?")) return;
+    try {
+      await api.campaigns.deleteStep(campaignId, step.id);
+      await onDeleted();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.detail : "Błąd");
+    }
+  }
+
+  const dirty =
+    subject !== step.subject ||
+    body !== step.body_template ||
+    delay !== step.delay_days;
+
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
-      <div className="mb-2 flex items-center justify-between">
-        <div>
-          <span className="text-xs font-medium text-gray-500">
-            STEP #{step.step_order}
-          </span>
-          <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
-            +{step.delay_days} dni
-          </span>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setEditing(!editing)}
-            className="text-xs text-gray-600 hover:underline"
-          >
-            {editing ? "Anuluj" : "Edytuj"}
-          </button>
-          <button
-            onClick={onDelete}
-            className="text-xs text-red-600 hover:underline"
-          >
-            Usuń
-          </button>
-        </div>
+    <form onSubmit={handleSave} className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-medium text-gray-700">
+          Edycja step #{step.step_order}
+          {stats && (
+            <span className="ml-2 text-xs font-normal text-gray-500">
+              ✓ {stats.sent_count} wysłanych
+              {stats.failed_count > 0 && (
+                <> · ✗ {stats.failed_count} błędów</>
+              )}
+            </span>
+          )}
+        </h4>
+        <button
+          type="button"
+          onClick={handleDelete}
+          className="text-xs text-red-600 hover:underline"
+        >
+          Usuń step
+        </button>
       </div>
 
-      {editing ? (
-        <form onSubmit={handleSave} className="space-y-2">
-          <input
-            type="text"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
-          />
-          <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            rows={6}
-            className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
-          />
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-700">Delay (dni):</label>
-            <input
-              type="number"
-              min={0}
-              max={365}
-              value={delay}
-              onChange={(e) => setDelay(Number(e.target.value))}
-              className="w-20 rounded-md border border-gray-300 px-3 py-2 text-sm"
-            />
+      <input
+        type="text"
+        value={subject}
+        onChange={(e) => setSubject(e.target.value)}
+        className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
+      />
+      <textarea
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        rows={8}
+        className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
+      />
+      <div className="flex items-center gap-2">
+        <label className="text-sm text-gray-700">Delay (dni):</label>
+        <input
+          type="number"
+          min={0}
+          max={365}
+          value={delay}
+          onChange={(e) => setDelay(Number(e.target.value))}
+          className="w-20 rounded-md border border-gray-300 px-3 py-2 text-sm"
+        />
+      </div>
+
+      <button
+        disabled={saving || !dirty}
+        className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+      >
+        {saving ? "Zapisywanie..." : dirty ? "Zapisz zmiany" : "Bez zmian"}
+      </button>
+    </form>
+  );
+}
+
+function PreviewSection({
+  campaignId,
+  steps,
+  enrollments,
+}: {
+  campaignId: number;
+  steps: SequenceStep[];
+  enrollments: Enrollment[];
+}) {
+  const [stepId, setStepId] = useState<number | "">("");
+  const [leadId, setLeadId] = useState<number | "">("");
+  const [preview, setPreview] = useState<PreviewResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handlePreview(e: FormEvent) {
+    e.preventDefault();
+    if (stepId === "" || leadId === "") return;
+    setError(null);
+    setPreview(null);
+    try {
+      const p = await api.campaigns.preview(
+        campaignId,
+        Number(stepId),
+        Number(leadId),
+      );
+      setPreview(p);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Błąd");
+    }
+  }
+
+  return (
+    <section className="rounded-lg border border-gray-200 bg-white">
+      <div className="border-b border-gray-200 p-4">
+        <h3 className="text-sm font-medium text-gray-700">Preview</h3>
+      </div>
+      <div className="space-y-3 p-4">
+        <form
+          onSubmit={handlePreview}
+          className="flex flex-wrap items-end gap-3"
+        >
+          <div>
+            <label className="block text-xs font-medium text-gray-700">
+              Step
+            </label>
+            <select
+              value={stepId}
+              onChange={(e) =>
+                setStepId(e.target.value === "" ? "" : Number(e.target.value))
+              }
+              className="mt-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+            >
+              <option value="">— wybierz —</option>
+              {steps.map((s) => (
+                <option key={s.id} value={s.id}>
+                  [{s.step_order}] {s.subject.slice(0, 40)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700">
+              Lead
+            </label>
+            <select
+              value={leadId}
+              onChange={(e) =>
+                setLeadId(e.target.value === "" ? "" : Number(e.target.value))
+              }
+              className="mt-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+            >
+              <option value="">— wybierz —</option>
+              {enrollments.map((e) => (
+                <option key={e.lead_id} value={e.lead_id}>
+                  {e.lead_email}
+                </option>
+              ))}
+            </select>
           </div>
           <button
-            disabled={saving}
-            className="rounded-md bg-gray-900 px-4 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            type="submit"
+            disabled={stepId === "" || leadId === ""}
+            className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-800 disabled:opacity-50"
           >
-            {saving ? "Zapisywanie..." : "Zapisz"}
+            Renderuj
           </button>
         </form>
-      ) : (
-        <>
-          <p className="font-medium text-gray-900">{step.subject}</p>
-          <pre className="mt-2 whitespace-pre-wrap font-mono text-sm text-gray-700">
-            {step.body_template}
-          </pre>
-        </>
-      )}
-    </div>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        {preview && (
+          <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+            <p className="text-xs font-medium uppercase text-gray-500">
+              Subject
+            </p>
+            <p className="mt-1 font-medium text-gray-900">{preview.subject}</p>
+            <p className="mt-3 text-xs font-medium uppercase text-gray-500">
+              Body
+            </p>
+            <pre className="mt-1 whitespace-pre-wrap font-mono text-sm text-gray-900">
+              {preview.body}
+            </pre>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

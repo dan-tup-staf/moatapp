@@ -144,6 +144,29 @@ export type PreviewResponse = {
   body: string;
 };
 
+export type StepStats = {
+  step_id: number;
+  step_order: number;
+  sent_count: number;
+  failed_count: number;
+};
+
+export type EnrollmentsBreakdown = {
+  total: number;
+  active: number;
+  completed: number;
+  paused: number;
+  replied: number;
+  bounced: number;
+};
+
+export type CampaignStats = {
+  enrollments: EnrollmentsBreakdown;
+  messages_sent_total: number;
+  messages_failed_total: number;
+  steps: StepStats[];
+};
+
 // ---------- Signals ----------
 
 export type SourceType =
@@ -479,6 +502,9 @@ export const api = {
         `/campaigns/${campaignId}/send-due-now`,
         { method: "POST" },
       ),
+
+    stats: (campaignId: number) =>
+      authed<CampaignStats>(`/campaigns/${campaignId}/stats`),
   },
 
   // Signal sources

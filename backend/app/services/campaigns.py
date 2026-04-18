@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,6 +8,7 @@ from app.models.campaign import Campaign
 from app.models.campaign_enrollment import CampaignEnrollment
 from app.models.lead import Lead
 from app.models.lead_list import LeadList
+from app.models.message import Message
 from app.models.sequence_step import SequenceStep
 from app.schemas.campaigns import (
     CampaignCreate,
@@ -239,6 +240,82 @@ async def delete_enrollment(
 
 
 # ---------- Template rendering ----------
+
+
+async def get_campaign_stats(
+    db: AsyncSession, campaign_id: int
+) -> dict:
+    """Lemlist-style aggregated metrics for a campaign. Three queries:
+    enrollment breakdown by status, overall message counts, per-step
+    message counts."""
+    # Enrollments by status
+    enr_stmt = (
+        select(CampaignEnrollment.status, func.count(CampaignEnrollment.id))
+        .where(CampaignEnrollment.campaign_id == campaign_id)
+        .group_by(CampaignEnrollment.status)
+    )
+    enr_counts = {row[0]: row[1] for row in (await db.execute(enr_stmt)).all()}
+    total_enr = sum(enr_counts.values())
+
+    # Overall message counts
+    msg_stmt = (
+        select(
+            func.coalesce(
+                func.sum(case((Message.status == "sent", 1), else_=0)), 0
+            ),
+            func.coalesce(
+                func.sum(case((Message.status == "failed", 1), else_=0)), 0
+            ),
+        )
+        .select_from(Message)
+        .join(
+            CampaignEnrollment,
+            CampaignEnrollment.id == Message.enrollment_id,
+        )
+        .where(CampaignEnrollment.campaign_id == campaign_id)
+    )
+    msg_sent, msg_failed = (await db.execute(msg_stmt)).one()
+
+    # Per-step counts — LEFT JOIN so steps with zero sends still appear
+    step_stmt = (
+        select(
+            SequenceStep.id,
+            SequenceStep.step_order,
+            func.coalesce(
+                func.sum(case((Message.status == "sent", 1), else_=0)), 0
+            ),
+            func.coalesce(
+                func.sum(case((Message.status == "failed", 1), else_=0)), 0
+            ),
+        )
+        .outerjoin(Message, Message.step_id == SequenceStep.id)
+        .where(SequenceStep.campaign_id == campaign_id)
+        .group_by(SequenceStep.id, SequenceStep.step_order)
+        .order_by(SequenceStep.step_order.asc(), SequenceStep.id.asc())
+    )
+    step_rows = (await db.execute(step_stmt)).all()
+
+    return {
+        "enrollments": {
+            "total": int(total_enr),
+            "active": int(enr_counts.get("active", 0)),
+            "completed": int(enr_counts.get("completed", 0)),
+            "paused": int(enr_counts.get("paused", 0)),
+            "replied": int(enr_counts.get("replied", 0)),
+            "bounced": int(enr_counts.get("bounced", 0)),
+        },
+        "messages_sent_total": int(msg_sent or 0),
+        "messages_failed_total": int(msg_failed or 0),
+        "steps": [
+            {
+                "step_id": row[0],
+                "step_order": row[1],
+                "sent_count": int(row[2] or 0),
+                "failed_count": int(row[3] or 0),
+            }
+            for row in step_rows
+        ],
+    }
 
 
 def render_template(template: str, lead: Lead) -> str:
