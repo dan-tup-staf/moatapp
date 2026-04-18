@@ -7,16 +7,19 @@ import {
   api,
   ApiError,
   CompanyRow,
+  IcpProfile,
+  IcpQA,
   LeadList,
   PersonRow,
 } from "@/lib/api-client";
 
-type Tab = "lists" | "companies" | "people";
+type Tab = "lists" | "companies" | "people" | "icp";
 
 const TAB_LABELS: Record<Tab, string> = {
   lists: "Listy",
   companies: "Firmy",
   people: "Osoby",
+  icp: "Twój ICP",
 };
 
 export default function ContactsPage() {
@@ -30,6 +33,8 @@ export default function ContactsPage() {
           {tab === "lists" && "Kolekcje prospektów do outreachu"}
           {tab === "companies" && "Firmy zagregowane z wszystkich Twoich list"}
           {tab === "people" && "Wszystkie osoby z wszystkich list"}
+          {tab === "icp" &&
+            "Ideal Customer Profile — wygenerowany z Twojej strony firmy + pytań"}
         </p>
       </div>
 
@@ -55,6 +60,7 @@ export default function ContactsPage() {
       {tab === "lists" && <ListsTab />}
       {tab === "companies" && <CompaniesTab />}
       {tab === "people" && <PeopleTab />}
+      {tab === "icp" && <IcpTab />}
     </div>
   );
 }
@@ -501,6 +507,411 @@ function PeopleTab() {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------- Twój ICP tab ----------
+
+function IcpTab() {
+  const [icp, setIcp] = useState<IcpProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [url, setUrl] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+
+  const [qa, setQa] = useState<IcpQA[]>([]);
+  const [synthesizing, setSynthesizing] = useState(false);
+
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await api.icp.get();
+        setIcp(data);
+        if (data?.qa_history?.length) setQa(data.qa_history);
+      } catch (err) {
+        setError(err instanceof ApiError ? err.detail : "Błąd");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  async function handleAnalyze(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setAnalyzing(true);
+    try {
+      const res = await api.icp.analyzeUrl(url);
+      const newQa = res.suggested_questions.map((q) => ({
+        question: q,
+        answer: "",
+      }));
+      setQa(newQa);
+      // Reload profile (now persisted)
+      const fresh = await api.icp.get();
+      setIcp(fresh);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Błąd analizy");
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  async function handleSynthesize() {
+    setError(null);
+    setSynthesizing(true);
+    try {
+      const fresh = await api.icp.synthesize(qa);
+      setIcp(fresh);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Błąd syntezy");
+    } finally {
+      setSynthesizing(false);
+    }
+  }
+
+  async function handleSaveFields(patch: Record<string, unknown>) {
+    setSaving(true);
+    try {
+      const fresh = await api.icp.updateFields(patch);
+      setIcp(fresh);
+    } catch (err) {
+      alert(err instanceof ApiError ? err.detail : "Błąd");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleReset() {
+    if (!window.confirm("Wyczyścić cały ICP i zacząć od zera?")) return;
+    await api.icp.delete();
+    setIcp(null);
+    setQa([]);
+    setUrl("");
+  }
+
+  if (loading) return <p className="text-sm text-gray-500">Ładowanie...</p>;
+
+  const hasScraped = !!icp?.scraped_summary;
+  const hasIcp =
+    icp?.icp_fields &&
+    (icp.icp_fields.target_industries.length > 0 ||
+      icp.icp_fields.buyer_persona_titles.length > 0 ||
+      icp.icp_fields.company_size);
+
+  return (
+    <div className="space-y-6">
+      {error && (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+
+      {!hasScraped ? (
+        // Stage 1: Empty — input URL
+        <form
+          onSubmit={handleAnalyze}
+          className="space-y-3 rounded-lg border border-gray-200 bg-white p-6"
+        >
+          <h3 className="text-sm font-medium text-gray-700">
+            Krok 1/3 — Analizuj stronę Twojej firmy
+          </h3>
+          <p className="text-xs text-gray-500">
+            Podaj link do strony swojej firmy — LLM przeczyta ją i wygeneruje
+            kilka pytań precyzujących ICP.
+          </p>
+          <input
+            type="url"
+            required
+            placeholder="https://twoja-firma.pl"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+          />
+          <button
+            type="submit"
+            disabled={analyzing}
+            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          >
+            {analyzing ? "Analizuję..." : "Analizuj"}
+          </button>
+        </form>
+      ) : !hasIcp ? (
+        // Stage 2: Questions
+        <div className="space-y-4">
+          <div className="rounded-lg border border-gray-200 bg-white p-4 text-xs text-gray-600">
+            <p className="mb-1 font-medium text-gray-700">
+              Krok 2/3 — odpowiedz na pytania
+            </p>
+            <p>
+              Strona:{" "}
+              <a
+                href={icp!.source_url!}
+                target="_blank"
+                rel="noreferrer"
+                className="underline"
+              >
+                {icp!.source_url}
+              </a>
+            </p>
+          </div>
+
+          <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-4">
+            {qa.map((pair, i) => (
+              <div key={i}>
+                <p className="mb-1 text-sm font-medium text-gray-800">
+                  {i + 1}. {pair.question}
+                </p>
+                <textarea
+                  value={pair.answer}
+                  onChange={(e) => {
+                    const next = [...qa];
+                    next[i] = { ...next[i], answer: e.target.value };
+                    setQa(next);
+                  }}
+                  rows={3}
+                  placeholder="Odpowiedz własnymi słowami..."
+                  className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={handleSynthesize}
+              disabled={
+                synthesizing ||
+                qa.every((p) => !p.answer.trim())
+              }
+              className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            >
+              {synthesizing ? "Syntezuję..." : "Wygeneruj ICP →"}
+            </button>
+            <button
+              onClick={handleReset}
+              className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm hover:bg-gray-100"
+            >
+              Zacznij od nowa
+            </button>
+          </div>
+        </div>
+      ) : (
+        // Stage 3: Editable ICP
+        <IcpEditor
+          icp={icp!}
+          saving={saving}
+          onSave={handleSaveFields}
+          onReset={handleReset}
+          onRegenerate={handleSynthesize}
+          regenerating={synthesizing}
+          qa={qa}
+        />
+      )}
+    </div>
+  );
+}
+
+function IcpEditor({
+  icp,
+  saving,
+  onSave,
+  onReset,
+  onRegenerate,
+  regenerating,
+  qa,
+}: {
+  icp: IcpProfile;
+  saving: boolean;
+  onSave: (patch: Record<string, unknown>) => Promise<void>;
+  onReset: () => Promise<void>;
+  onRegenerate: () => Promise<void>;
+  regenerating: boolean;
+  qa: IcpQA[];
+}) {
+  const f = icp.icp_fields;
+  const [industries, setIndustries] = useState(f.target_industries.join(", "));
+  const [companySize, setCompanySize] = useState(f.company_size);
+  const [buyerTitles, setBuyerTitles] = useState(
+    f.buyer_persona_titles.join(", "),
+  );
+  const [painPoints, setPainPoints] = useState(f.pain_points.join("\n"));
+  const [triggers, setTriggers] = useState(f.triggers.join("\n"));
+  const [notes, setNotes] = useState(f.notes);
+
+  const [showQa, setShowQa] = useState(false);
+
+  function splitCsv(s: string): string[] {
+    return s
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+  }
+  function splitLines(s: string): string[] {
+    return s
+      .split("\n")
+      .map((x) => x.trim())
+      .filter(Boolean);
+  }
+
+  async function handleSave() {
+    await onSave({
+      target_industries: splitCsv(industries),
+      company_size: companySize,
+      buyer_persona_titles: splitCsv(buyerTitles),
+      pain_points: splitLines(painPoints),
+      triggers: splitLines(triggers),
+      notes,
+    });
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-900">
+        <p className="font-medium">✓ Krok 3/3 — ICP wygenerowane</p>
+        <p className="mt-1">
+          Edytuj dowolne pole, kliknij „Zapisz". Możesz też przegenerować
+          syntezę z nowymi odpowiedziami.
+        </p>
+      </div>
+
+      <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-4">
+        <Field
+          label="Target branże (przecinek)"
+          value={industries}
+          onChange={setIndustries}
+        />
+        <Field
+          label="Wielkość firmy"
+          value={companySize}
+          onChange={setCompanySize}
+          placeholder="np. 50-500 pracowników"
+        />
+        <Field
+          label="Buyer persona — stanowiska (przecinek)"
+          value={buyerTitles}
+          onChange={setBuyerTitles}
+        />
+        <FieldArea
+          label="Pain points (każdy w nowej linii)"
+          value={painPoints}
+          onChange={setPainPoints}
+          rows={4}
+        />
+        <FieldArea
+          label="Triggery kupowe (sygnały — każdy w nowej linii)"
+          value={triggers}
+          onChange={setTriggers}
+          rows={4}
+        />
+        <FieldArea
+          label="Dodatkowe notatki"
+          value={notes}
+          onChange={setNotes}
+          rows={3}
+        />
+
+        <div className="flex flex-wrap gap-3 border-t border-gray-200 pt-3">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          >
+            {saving ? "Zapisuję..." : "Zapisz zmiany"}
+          </button>
+          <button
+            onClick={onRegenerate}
+            disabled={regenerating}
+            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm hover:bg-gray-100 disabled:opacity-50"
+          >
+            {regenerating ? "Generuję..." : "Przegeneruj z LLM"}
+          </button>
+          <button
+            onClick={() => setShowQa(!showQa)}
+            className="ml-auto text-xs text-gray-500 hover:text-gray-900 underline"
+          >
+            {showQa ? "Ukryj" : "Pokaż"} pytania/odpowiedzi
+          </button>
+          <button
+            onClick={onReset}
+            className="text-xs text-red-600 hover:underline"
+          >
+            Reset całego ICP
+          </button>
+        </div>
+      </div>
+
+      {showQa && (
+        <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+          {qa.map((p, i) => (
+            <div key={i}>
+              <p className="text-xs font-medium text-gray-700">
+                {i + 1}. {p.question}
+              </p>
+              <p className="mt-0.5 text-sm text-gray-900 whitespace-pre-wrap">
+                {p.answer || <span className="text-gray-400">—</span>}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
+        {label}
+      </label>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+      />
+    </div>
+  );
+}
+
+function FieldArea({
+  label,
+  value,
+  onChange,
+  rows = 3,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  rows?: number;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
+        {label}
+      </label>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={rows}
+        className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+      />
     </div>
   );
 }

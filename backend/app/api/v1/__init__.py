@@ -6,6 +6,7 @@ from app.api.v1 import (
     crm,
     dashboard,
     health,
+    icp,
     leads,
     lists,
     signal_sources,
@@ -22,3 +23,4 @@ api_router.include_router(signal_sources.router)
 api_router.include_router(signals.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(crm.router)
+api_router.include_router(icp.router)

@@ -1,5 +1,6 @@
 from app.models.campaign import Campaign
 from app.models.campaign_enrollment import CampaignEnrollment
+from app.models.icp_profile import IcpProfile
 from app.models.lead import Lead
 from app.models.lead_list import LeadList
 from app.models.message import Message
@@ -18,4 +19,5 @@ __all__ = [
     "Message",
     "SignalSource",
     "Signal",
+    "IcpProfile",
 ]

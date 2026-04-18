@@ -52,6 +52,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-in-prod}
       ENVIRONMENT: development
       CORS_ORIGINS: '["http://localhost:3000"]'
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     ports:
       - "8000:8000"
     volumes:

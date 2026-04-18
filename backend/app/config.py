@@ -18,5 +18,10 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # Anthropic API — needed only for ICP feature; empty = feature disabled
+    anthropic_api_key: str = ""
+    anthropic_model_fast: str = "claude-haiku-4-5"
+    anthropic_model_quality: str = "claude-sonnet-4-6"
+
 
 settings = Settings()

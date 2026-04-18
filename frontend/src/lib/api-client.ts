@@ -353,6 +353,43 @@ export type PipelineView = {
   stages: PipelineStageBucket[];
 };
 
+// ---------- ICP ----------
+
+export type IcpFields = {
+  target_industries: string[];
+  company_size: string;
+  buyer_persona_titles: string[];
+  pain_points: string[];
+  triggers: string[];
+  notes: string;
+};
+
+export type IcpQA = { question: string; answer: string };
+
+export type IcpProfile = {
+  id: number;
+  source_url: string | null;
+  scraped_summary: string | null;
+  qa_history: IcpQA[];
+  icp_fields: IcpFields;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AnalyzeUrlResponse = {
+  scraped_summary: string;
+  suggested_questions: string[];
+};
+
+export type IcpFieldsUpdate = Partial<{
+  target_industries: string[];
+  company_size: string;
+  buyer_persona_titles: string[];
+  pain_points: string[];
+  triggers: string[];
+  notes: string;
+}>;
+
 // ---------- Errors ----------
 
 export class ApiError extends Error {
@@ -613,5 +650,25 @@ export const api = {
   },
   people: {
     list: () => authed<PersonRow[]>("/people"),
+  },
+
+  icp: {
+    get: () => authed<IcpProfile | null>("/icp"),
+    analyzeUrl: (url: string) =>
+      authed<AnalyzeUrlResponse>("/icp/analyze-url", {
+        method: "POST",
+        body: JSON.stringify({ url }),
+      }),
+    synthesize: (qa: IcpQA[]) =>
+      authed<IcpProfile>("/icp/synthesize", {
+        method: "POST",
+        body: JSON.stringify({ qa }),
+      }),
+    updateFields: (fields: IcpFieldsUpdate) =>
+      authed<IcpProfile>("/icp", {
+        method: "PATCH",
+        body: JSON.stringify(fields),
+      }),
+    delete: () => authed<void>("/icp", { method: "DELETE" }),
   },
 };
