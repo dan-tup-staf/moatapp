@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: "/campaigns", label: "Kampanie" },
   { href: "/signals", label: "Sygnały" },
   { href: "/signal-sources", label: "Źródła" },
+  { href: "/integrations", label: "Integracje" },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
