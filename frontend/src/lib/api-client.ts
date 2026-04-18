@@ -168,11 +168,22 @@ export type EnrollmentsBreakdown = {
   bounced: number;
 };
 
+export type CampaignPipelineStage = {
+  stage: string;
+  name: string;
+  companies_count: number;
+  total_score: number;
+  tier1: number;
+  tier2: number;
+  tier3: number;
+};
+
 export type CampaignStats = {
   enrollments: EnrollmentsBreakdown;
   messages_sent_total: number;
   messages_failed_total: number;
   steps: StepStats[];
+  pipeline: CampaignPipelineStage[];
 };
 
 export type AudienceCriteria = {

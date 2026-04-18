@@ -11,6 +11,7 @@ import {
   AudienceLead,
   AudiencePreview,
   Campaign,
+  CampaignPipelineStage,
   CampaignStats,
   CampaignStatus,
   Enrollment,
@@ -88,6 +89,7 @@ export default function CampaignDetailPage() {
   const [selectedStepId, setSelectedStepId] = useState<number | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showEnrollments, setShowEnrollments] = useState(false);
+  const [showPipeline, setShowPipeline] = useState(false);
 
   // Send-due state
   const [sending, setSending] = useState(false);
@@ -277,6 +279,15 @@ export default function CampaignDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Pipeline kampanii (collapsible, opt-in) */}
+      {stats && stats.enrollments.total > 0 && (
+        <CampaignPipelineSection
+          stages={stats.pipeline}
+          open={showPipeline}
+          onToggle={() => setShowPipeline(!showPipeline)}
+        />
+      )}
 
       {/* Settings panel (collapsible) */}
       {showSettings && (
@@ -960,6 +971,122 @@ function StepEditor({
         {saving ? "Zapisywanie..." : dirty ? "Zapisz zmiany" : "Bez zmian"}
       </button>
     </form>
+  );
+}
+
+function CampaignPipelineSection({
+  stages,
+  open,
+  onToggle,
+}: {
+  stages: CampaignPipelineStage[];
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const total = stages.reduce((a, s) => a + s.companies_count, 0);
+
+  return (
+    <section className="rounded-lg border border-gray-200 bg-white">
+      <button
+        onClick={onToggle}
+        className="flex w-full items-center justify-between border-b border-gray-200 p-4 text-left hover:bg-gray-50"
+      >
+        <div>
+          <h3 className="text-sm font-medium text-gray-700">
+            📈 Pipeline kampanii{" "}
+            <span className="text-xs font-normal text-gray-500">
+              ({total} {total === 1 ? "firma" : "firm"})
+            </span>
+          </h3>
+          <p className="mt-0.5 text-xs text-gray-500">
+            Firmy z enrollmentami tej kampanii bucketowane po statusie leadów
+          </p>
+        </div>
+        <span className="text-gray-400">{open ? "▾" : "▸"}</span>
+      </button>
+
+      {open && (
+        <div className="grid grid-cols-2 gap-3 p-4 md:grid-cols-4">
+          {stages.map((st) => (
+            <CampaignPipelineCard key={st.stage} bucket={st} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CampaignPipelineCard({
+  bucket,
+}: {
+  bucket: CampaignPipelineStage;
+}) {
+  const empty = bucket.companies_count === 0;
+  return (
+    <div className="rounded-md border border-gray-200 bg-gray-50/50 p-3">
+      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+        {bucket.name}
+      </p>
+      <p
+        className={
+          "mt-1 text-3xl font-bold " +
+          (empty ? "text-gray-300" : "text-gray-900")
+        }
+      >
+        {bucket.companies_count}
+      </p>
+      <p className="mt-0.5 text-xs text-gray-500">
+        {empty ? (
+          "—"
+        ) : (
+          <>
+            Σ score{" "}
+            <span className="font-mono text-gray-700">
+              {bucket.total_score}
+            </span>
+          </>
+        )}
+      </p>
+      {!empty && (
+        <div className="mt-3 space-y-1 text-xs">
+          <TierRow label="Tier 1" count={bucket.tier1} color="bg-emerald-500" />
+          <TierRow label="Tier 2" count={bucket.tier2} color="bg-amber-500" />
+          <TierRow label="Tier 3" count={bucket.tier3} color="bg-gray-400" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TierRow({
+  label,
+  count,
+  color,
+}: {
+  label: string;
+  count: number;
+  color: string;
+}) {
+  const muted = count === 0;
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className={
+          "inline-block h-2 w-2 shrink-0 rounded-full " +
+          (muted ? "bg-gray-200" : color)
+        }
+      />
+      <span className={muted ? "text-gray-400" : "text-gray-700"}>
+        {label}
+      </span>
+      <span
+        className={
+          "ml-auto font-mono " + (muted ? "text-gray-300" : "text-gray-900")
+        }
+      >
+        {count}
+      </span>
+    </div>
   );
 }
 

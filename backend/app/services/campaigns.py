@@ -540,6 +540,8 @@ async def get_campaign_stats(
     )
     step_rows = (await db.execute(step_stmt)).all()
 
+    pipeline = await _campaign_pipeline_buckets(db, campaign_id)
+
     return {
         "enrollments": {
             "total": int(total_enr),
@@ -560,7 +562,96 @@ async def get_campaign_stats(
             }
             for row in step_rows
         ],
+        "pipeline": pipeline,
     }
+
+
+async def _campaign_pipeline_buckets(
+    db: AsyncSession, campaign_id: int
+) -> list[dict]:
+    """Group this campaign's enrolled leads into 4 buying-journey stages
+    (mirror of services/pipeline.py but scoped to one campaign)."""
+    from app.models.lead import Lead as LeadModel
+
+    stage_by_status = {
+        "new": "awareness",
+        "contacted": "education",
+        "replied": "requirements",
+    }
+    stage_labels = {
+        "awareness": "Świadomość",
+        "education": "Edukacja",
+        "requirements": "Budowanie wymagań",
+        "vendor_selection": "Wybór dostawcy",
+    }
+    order = ["awareness", "education", "requirements", "vendor_selection"]
+
+    # Per-company rollup: highest status + sum(score) across leads of enrollees
+    stmt = (
+        select(
+            LeadModel.company,
+            LeadModel.status,
+            LeadModel.score,
+        )
+        .join(
+            CampaignEnrollment,
+            CampaignEnrollment.lead_id == LeadModel.id,
+        )
+        .where(
+            CampaignEnrollment.campaign_id == campaign_id,
+            LeadModel.company.isnot(None),
+            LeadModel.company != "",
+        )
+    )
+    rows = (await db.execute(stmt)).all()
+
+    status_rank = {
+        "replied": 5,
+        "contacted": 4,
+        "new": 3,
+        "bounced": 2,
+        "unsubscribed": 1,
+    }
+
+    per_company: dict[str, dict] = {}
+    for company, lead_status, score in rows:
+        entry = per_company.setdefault(
+            company, {"status": lead_status, "score": 0}
+        )
+        if status_rank.get(lead_status, 0) > status_rank.get(
+            entry["status"], 0
+        ):
+            entry["status"] = lead_status
+        entry["score"] += int(score or 0)
+
+    buckets: dict[str, list[dict]] = {s: [] for s in order}
+    for company, data in per_company.items():
+        stage = stage_by_status.get(data["status"])
+        if stage is None:
+            continue  # bounced/unsubscribed skipped
+        tier = 1 if data["score"] > 100 else 2 if data["score"] > 20 else 3
+        buckets[stage].append(
+            {"company": company, "score": data["score"], "tier": tier}
+        )
+
+    result = []
+    for s in order:
+        arr = buckets[s]
+        t1 = sum(1 for c in arr if c["tier"] == 1)
+        t2 = sum(1 for c in arr if c["tier"] == 2)
+        t3 = sum(1 for c in arr if c["tier"] == 3)
+        result.append(
+            {
+                "stage": s,
+                "name": stage_labels[s],
+                "companies_count": len(arr),
+                "total_score": sum(c["score"] for c in arr),
+                "tier1": t1,
+                "tier2": t2,
+                "tier3": t3,
+            }
+        )
+    return result
 
 
 def render_template(template: str, lead: Lead) -> str:

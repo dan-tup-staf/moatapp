@@ -194,6 +194,16 @@ class EnrollmentsBreakdown(BaseModel):
     bounced: int
 
 
+class CampaignPipelineStage(BaseModel):
+    stage: str  # awareness | education | requirements | vendor_selection
+    name: str
+    companies_count: int
+    total_score: int
+    tier1: int
+    tier2: int
+    tier3: int
+
+
 class CampaignStats(BaseModel):
     """Per-step + overall metrics for the lemlist-style detail view."""
 
@@ -201,3 +211,4 @@ class CampaignStats(BaseModel):
     messages_sent_total: int
     messages_failed_total: int
     steps: list[StepStats]
+    pipeline: list[CampaignPipelineStage]
