@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { api, ApiError, SignalSummary, SourceType } from "@/lib/api-client";
 
@@ -12,6 +12,41 @@ const TYPE_LABELS: Record<SourceType, string> = {
   news: "news",
   tech_change: "tech change",
 };
+
+type StrengthFilter = "all" | "strong" | "medium" | "weak";
+type TimeFilter =
+  | "all"
+  | "today"
+  | "7d"
+  | "30d"
+  | "90d"
+  | "custom";
+type TypeFilter = "all" | SourceType;
+
+const TIME_LABELS: Record<TimeFilter, string> = {
+  all: "Wszystkie",
+  today: "Dzisiaj",
+  "7d": "7 dni",
+  "30d": "30 dni",
+  "90d": "90 dni",
+  custom: "Zakres…",
+};
+
+const STRENGTH_LABELS: Record<StrengthFilter, string> = {
+  all: "Wszystkie",
+  strong: "Mocne (≥4)",
+  medium: "Średnie (2-3)",
+  weak: "Słabe (≤1)",
+};
+
+function daysCutoffMs(filter: TimeFilter): number | null {
+  const DAY = 1000 * 60 * 60 * 24;
+  if (filter === "today") return DAY;
+  if (filter === "7d") return DAY * 7;
+  if (filter === "30d") return DAY * 30;
+  if (filter === "90d") return DAY * 90;
+  return null;
+}
 
 /** Siła sygnału 0-5 — średnia z trzech wskaźników:
  *  - freshness: jak niedawno przyszedł ostatni sygnał
@@ -59,6 +94,12 @@ export default function SignalsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [strengthFilter, setStrengthFilter] = useState<StrengthFilter>("all");
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>("all");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+
   async function refresh() {
     setLoading(true);
     setError(null);
@@ -75,9 +116,48 @@ export default function SignalsPage() {
     refresh();
   }, []);
 
-  const totalSignals = summaries.reduce((a, s) => a + s.signals_count, 0);
-  const totalCompanies = summaries.reduce((a, s) => a + s.unique_companies, 0);
-  const totalImpact = summaries.reduce((a, s) => a + s.pipeline_impact, 0);
+  const availableTypes = useMemo(() => {
+    const set = new Set<SourceType>();
+    for (const s of summaries) set.add(s.source_type);
+    return Array.from(set);
+  }, [summaries]);
+
+  const filtered = useMemo(() => {
+    const cutoff = daysCutoffMs(timeFilter);
+    const fromMs = customFrom ? new Date(customFrom).getTime() : null;
+    const toMs = customTo ? new Date(customTo).getTime() + 86_400_000 : null;
+
+    return summaries.filter((s) => {
+      if (typeFilter !== "all" && s.source_type !== typeFilter) return false;
+
+      if (strengthFilter !== "all") {
+        const str = computeStrength(s);
+        if (strengthFilter === "strong" && str < 4) return false;
+        if (strengthFilter === "medium" && (str < 2 || str > 3)) return false;
+        if (strengthFilter === "weak" && str > 1) return false;
+      }
+
+      if (timeFilter !== "all") {
+        if (!s.latest_signal_at) return false;
+        const ts = new Date(s.latest_signal_at).getTime();
+        if (timeFilter === "custom") {
+          if (fromMs !== null && ts < fromMs) return false;
+          if (toMs !== null && ts > toMs) return false;
+        } else if (cutoff !== null) {
+          if (Date.now() - ts > cutoff) return false;
+        }
+      }
+
+      return true;
+    });
+  }, [summaries, strengthFilter, timeFilter, typeFilter, customFrom, customTo]);
+
+  const totalSignals = filtered.reduce((a, s) => a + s.signals_count, 0);
+  const totalCompanies = filtered.reduce((a, s) => a + s.unique_companies, 0);
+  const totalImpact = filtered.reduce((a, s) => a + s.pipeline_impact, 0);
+
+  const hasActiveFilter =
+    strengthFilter !== "all" || timeFilter !== "all" || typeFilter !== "all";
 
   return (
     <div className="space-y-6">
@@ -85,8 +165,9 @@ export default function SignalsPage() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Sygnały</h2>
           <p className="mt-1 text-sm text-gray-600">
-            {summaries.length}{" "}
-            {summaries.length === 1 ? "źródło" : "źródeł"} · {totalSignals}{" "}
+            {filtered.length}
+            {hasActiveFilter && ` z ${summaries.length}`}{" "}
+            {filtered.length === 1 ? "źródło" : "źródeł"} · {totalSignals}{" "}
             detekcji · {totalCompanies} firm · +{totalImpact} pipeline
           </p>
         </div>
@@ -96,6 +177,76 @@ export default function SignalsPage() {
         >
           Odśwież
         </button>
+      </div>
+
+      {/* Filters */}
+      <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <FilterGroup
+            label="Siła"
+            value={strengthFilter}
+            onChange={(v) => setStrengthFilter(v as StrengthFilter)}
+            options={(
+              Object.keys(STRENGTH_LABELS) as StrengthFilter[]
+            ).map((v) => ({ value: v, label: STRENGTH_LABELS[v] }))}
+          />
+          <FilterGroup
+            label="Czas"
+            value={timeFilter}
+            onChange={(v) => setTimeFilter(v as TimeFilter)}
+            options={(Object.keys(TIME_LABELS) as TimeFilter[]).map(
+              (v) => ({ value: v, label: TIME_LABELS[v] }),
+            )}
+          />
+          <FilterGroup
+            label="Źródło"
+            value={typeFilter}
+            onChange={(v) => setTypeFilter(v as TypeFilter)}
+            options={[
+              { value: "all" as TypeFilter, label: "Wszystkie" },
+              ...availableTypes.map((t) => ({
+                value: t as TypeFilter,
+                label: TYPE_LABELS[t] ?? t,
+              })),
+            ]}
+          />
+          {hasActiveFilter && (
+            <button
+              onClick={() => {
+                setStrengthFilter("all");
+                setTimeFilter("all");
+                setTypeFilter("all");
+                setCustomFrom("");
+                setCustomTo("");
+              }}
+              className="ml-auto text-xs text-gray-500 hover:text-gray-900 underline"
+            >
+              wyczyść filtry
+            </button>
+          )}
+        </div>
+        {timeFilter === "custom" && (
+          <div className="flex flex-wrap items-center gap-2 border-t border-gray-200 pt-3">
+            <label className="text-xs font-medium uppercase text-gray-500">
+              Od
+            </label>
+            <input
+              type="date"
+              value={customFrom}
+              onChange={(e) => setCustomFrom(e.target.value)}
+              className="rounded-md border border-gray-300 px-2 py-1 text-xs"
+            />
+            <label className="ml-2 text-xs font-medium uppercase text-gray-500">
+              Do
+            </label>
+            <input
+              type="date"
+              value={customTo}
+              onChange={(e) => setCustomTo(e.target.value)}
+              className="rounded-md border border-gray-300 px-2 py-1 text-xs"
+            />
+          </div>
+        )}
       </div>
 
       {error && (
@@ -114,13 +265,54 @@ export default function SignalsPage() {
           </Link>
           .
         </p>
+      ) : filtered.length === 0 ? (
+        <p className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
+          Brak źródeł pasujących do filtrów.
+        </p>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {summaries.map((s) => (
+          {filtered.map((s) => (
             <SignalCard key={s.source_id} summary={s} />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function FilterGroup<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs font-medium uppercase text-gray-500">
+        {label}
+      </span>
+      <div className="flex flex-wrap rounded-md border border-gray-300 text-xs">
+        {options.map((opt, i) => (
+          <button
+            key={opt.value}
+            onClick={() => onChange(opt.value)}
+            className={
+              "px-2.5 py-1 transition " +
+              (value === opt.value
+                ? "bg-gray-900 text-white"
+                : "text-gray-700 hover:bg-gray-100") +
+              (i > 0 ? " border-l border-gray-300" : "")
+            }
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
