@@ -265,6 +265,33 @@ export type HotLead = {
   signals_count: number;
 };
 
+export type PipelineStage =
+  | "awareness"
+  | "education"
+  | "requirements"
+  | "vendor_selection";
+
+export type PipelineCompany = {
+  company: string;
+  leads_count: number;
+  total_score: number;
+  tier: 1 | 2 | 3;
+  signals_count: number;
+  last_activity_at: string | null;
+};
+
+export type PipelineStageBucket = {
+  stage: PipelineStage;
+  name: string;
+  companies: PipelineCompany[];
+  companies_count: number;
+  total_score: number;
+};
+
+export type PipelineView = {
+  stages: PipelineStageBucket[];
+};
+
 // ---------- Errors ----------
 
 export class ApiError extends Error {
@@ -501,6 +528,7 @@ export const api = {
     stats: () => authed<DashboardStats>("/dashboard/stats"),
     hotLeads: (limit = 10) =>
       authed<HotLead[]>(`/dashboard/hot-leads?limit=${limit}`),
+    pipeline: () => authed<PipelineView>("/dashboard/pipeline"),
   },
 
   // CRM aggregates (cross-list views for Listy tabs)
