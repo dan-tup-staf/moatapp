@@ -519,6 +519,8 @@ function IcpTab() {
   const [error, setError] = useState<string | null>(null);
 
   const [url, setUrl] = useState("");
+  const [manualDescription, setManualDescription] = useState("");
+  const [useManual, setUseManual] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
 
   const [qa, setQa] = useState<IcpQA[]>([]);
@@ -545,17 +547,29 @@ function IcpTab() {
     setError(null);
     setAnalyzing(true);
     try {
-      const res = await api.icp.analyzeUrl(url);
+      const payload = useManual
+        ? { manual_description: manualDescription }
+        : { url };
+      const res = await api.icp.analyzeUrl(payload);
       const newQa = res.suggested_questions.map((q) => ({
         question: q,
         answer: "",
       }));
       setQa(newQa);
-      // Reload profile (now persisted)
       const fresh = await api.icp.get();
       setIcp(fresh);
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : "Błąd analizy");
+      const msg = err instanceof ApiError ? err.detail : "Błąd analizy";
+      setError(msg);
+      // 400 = scraping failed → automatycznie zasugeruj ręczny opis
+      if (
+        err instanceof ApiError &&
+        err.status === 400 &&
+        !useManual &&
+        msg.includes("pobrać")
+      ) {
+        setUseManual(true);
+      }
     } finally {
       setAnalyzing(false);
     }
@@ -612,29 +626,84 @@ function IcpTab() {
       )}
 
       {!hasScraped ? (
-        // Stage 1: Empty — input URL
+        // Stage 1: Empty — URL lub manual description
         <form
           onSubmit={handleAnalyze}
           className="space-y-3 rounded-lg border border-gray-200 bg-white p-6"
         >
           <h3 className="text-sm font-medium text-gray-700">
-            Krok 1/3 — Analizuj stronę Twojej firmy
+            Krok 1/3 — Powiedz o swojej firmie
           </h3>
-          <p className="text-xs text-gray-500">
-            Podaj link do strony swojej firmy — LLM przeczyta ją i wygeneruje
-            kilka pytań precyzujących ICP.
-          </p>
-          <input
-            type="url"
-            required
-            placeholder="https://twoja-firma.pl"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
-          />
+
+          <div className="flex gap-2 text-xs">
+            <button
+              type="button"
+              onClick={() => setUseManual(false)}
+              className={
+                "rounded-full px-3 py-1 transition " +
+                (useManual
+                  ? "text-gray-600 hover:text-gray-900"
+                  : "bg-gray-900 text-white")
+              }
+            >
+              Link do strony
+            </button>
+            <button
+              type="button"
+              onClick={() => setUseManual(true)}
+              className={
+                "rounded-full px-3 py-1 transition " +
+                (useManual
+                  ? "bg-gray-900 text-white"
+                  : "text-gray-600 hover:text-gray-900")
+              }
+            >
+              Opis ręczny
+            </button>
+          </div>
+
+          {useManual ? (
+            <>
+              <p className="text-xs text-gray-500">
+                Użyj, jeśli strona blokuje scraping (Cloudflare/anti-bot).
+                Opisz firmę w 3-6 zdaniach — co robicie, komu sprzedajecie,
+                czym się wyróżniacie.
+              </p>
+              <textarea
+                required
+                rows={6}
+                placeholder="Np. Staffly to platforma do testów rekrutacyjnych dla zespołów HR w średnich firmach..."
+                value={manualDescription}
+                onChange={(e) => setManualDescription(e.target.value)}
+                className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+              />
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-gray-500">
+                Podaj link do strony swojej firmy — scraper ją przeczyta,
+                LLM wygeneruje pytania precyzujące ICP. Gdy strona blokuje
+                boty, przełącz na „Opis ręczny".
+              </p>
+              <input
+                type="url"
+                required
+                placeholder="https://twoja-firma.pl"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+              />
+            </>
+          )}
+
           <button
             type="submit"
-            disabled={analyzing}
+            disabled={
+              analyzing ||
+              (useManual
+                ? manualDescription.trim().length < 20
+                : !url.trim())
+            }
             className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
           >
             {analyzing ? "Analizuję..." : "Analizuj"}

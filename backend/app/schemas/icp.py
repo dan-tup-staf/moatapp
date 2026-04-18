@@ -5,7 +5,10 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 
 class AnalyzeUrlRequest(BaseModel):
-    url: HttpUrl
+    url: HttpUrl | None = None
+    # Fallback — jeśli strona blokuje scraping (Cloudflare/403),
+    # user wkleja opis firmy ręcznie. Co najmniej jedno z pól wymagane.
+    manual_description: str | None = None
 
 
 class AnalyzeUrlResponse(BaseModel):

@@ -45,18 +45,34 @@ async def analyze_url(
     current: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> AnalyzeUrlResponse:
-    url_str = str(payload.url)
-    try:
-        scraped = await svc.scrape_company_site(url_str)
-    except RuntimeError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    manual = (payload.manual_description or "").strip()
+    url_str = str(payload.url) if payload.url else None
+
+    if not url_str and not manual:
+        raise HTTPException(
+            status_code=400,
+            detail="Podaj URL strony firmy lub ręczny opis firmy",
+        )
+
+    if manual:
+        # Użyj opisu ręcznego jako źródła prawdy (pomijamy scraping)
+        scraped = f"MANUAL DESCRIPTION:\n{manual}"
+    else:
+        try:
+            scraped = await svc.scrape_company_site(url_str)
+        except RuntimeError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
     try:
         questions = await svc.generate_questions(scraped)
     except AnthropicNotConfigured as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
-    await svc.upsert_after_analysis(db, current.id, url_str, scraped, questions)
+
+    await svc.upsert_after_analysis(
+        db, current.id, url_str or "(manual)", scraped, questions
+    )
     return AnalyzeUrlResponse(
         scraped_summary=scraped, suggested_questions=questions
     )

@@ -665,10 +665,10 @@ export const api = {
 
   icp: {
     get: () => authed<IcpProfile | null>("/icp"),
-    analyzeUrl: (url: string) =>
+    analyzeUrl: (payload: { url?: string; manual_description?: string }) =>
       authed<AnalyzeUrlResponse>("/icp/analyze-url", {
         method: "POST",
-        body: JSON.stringify({ url }),
+        body: JSON.stringify(payload),
       }),
     synthesize: (qa: IcpQA[]) =>
       authed<IcpProfile>("/icp/synthesize", {
