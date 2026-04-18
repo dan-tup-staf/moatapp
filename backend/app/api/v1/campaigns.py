@@ -7,6 +7,9 @@ from app.deps import get_current_user
 from app.models.lead import Lead
 from app.models.user import User
 from app.schemas.campaigns import (
+    AudienceCriteria,
+    AudienceEnrollRequest,
+    AudiencePreview,
     CampaignCreate,
     CampaignRead,
     CampaignStats,
@@ -200,6 +203,33 @@ async def enroll_from_list(
 ) -> EnrollResult:
     await _ensure_owned_campaign(db, current, campaign_id)
     return await svc.enroll_from_list(db, current.id, campaign_id, payload.list_id)
+
+
+@router.post(
+    "/{campaign_id}/audience/preview", response_model=AudiencePreview
+)
+async def audience_preview(
+    campaign_id: int,
+    criteria: AudienceCriteria,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AudiencePreview:
+    await _ensure_owned_campaign(db, current, campaign_id)
+    data = await svc.audience_preview(db, current.id, campaign_id, criteria)
+    return AudiencePreview(**data)
+
+
+@router.post(
+    "/{campaign_id}/audience/enroll", response_model=EnrollResult
+)
+async def audience_enroll(
+    campaign_id: int,
+    payload: AudienceEnrollRequest,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> EnrollResult:
+    await _ensure_owned_campaign(db, current, campaign_id)
+    return await svc.enroll_leads(db, current.id, campaign_id, payload.lead_ids)
 
 
 @router.delete(

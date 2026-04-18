@@ -116,6 +116,52 @@ class EnrollResult(BaseModel):
     skipped_already_enrolled: int
 
 
+# ---------- Audience builder ----------
+
+
+class AudienceCriteria(BaseModel):
+    """Targetowanie dla kampanii — zwraca listę leadów pasujących do kryteriów.
+    Każdy filtr niezależny; puste/None = bez ograniczeń dla tego wymiaru."""
+
+    include_list_ids: list[int] = Field(default_factory=list)
+    exclude_list_ids: list[int] = Field(default_factory=list)
+    # Tier: 1 (score > 100), 2 (20-100), 3 (< 20). Empty list = all.
+    tiers: list[int] = Field(default_factory=list)
+    # Signal source strength 0-5 — leads muszą mieć signal z source'a o strength >= N
+    min_source_strength: int | None = Field(default=None, ge=0, le=5)
+    # Explicit source id include
+    signal_source_ids: list[int] = Field(default_factory=list)
+    # Fragment tytułu sygnału (ILIKE)
+    signal_title_query: str | None = None
+
+
+class AudienceLead(BaseModel):
+    """Lead row in audience preview with enrollment status hint."""
+
+    id: int
+    email: str
+    first_name: str | None
+    last_name: str | None
+    company: str | None
+    title: str | None
+    score: int
+    tier: int
+    list_id: int
+    list_name: str
+    signals_count: int
+    already_enrolled: bool
+
+
+class AudiencePreview(BaseModel):
+    leads: list[AudienceLead]
+    matched_total: int
+    already_enrolled_count: int
+
+
+class AudienceEnrollRequest(BaseModel):
+    lead_ids: list[int] = Field(min_length=1)
+
+
 # ---------- Preview ----------
 
 

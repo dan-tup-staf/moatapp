@@ -7,6 +7,9 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   api,
   ApiError,
+  AudienceCriteria,
+  AudienceLead,
+  AudiencePreview,
   Campaign,
   CampaignStats,
   CampaignStatus,
@@ -14,6 +17,7 @@ import {
   LeadList,
   PreviewResponse,
   SequenceStep,
+  SignalSummary,
   StepChannel,
   StepStats,
 } from "@/lib/api-client";
@@ -89,25 +93,27 @@ export default function CampaignDetailPage() {
   const [sending, setSending] = useState(false);
   const [sendMsg, setSendMsg] = useState<string | null>(null);
 
-  // Enroll state
-  const [enrollListId, setEnrollListId] = useState<number | "">("");
-  const [enrolling, setEnrolling] = useState(false);
+  // Audience builder state
+  const [sources, setSources] = useState<SignalSummary[]>([]);
+  const [showBuilder, setShowBuilder] = useState(false);
   const [enrollMsg, setEnrollMsg] = useState<string | null>(null);
 
   async function refresh() {
     try {
-      const [c, s, e, l, st] = await Promise.all([
+      const [c, s, e, l, st, srcs] = await Promise.all([
         api.campaigns.get(campaignId),
         api.campaigns.listSteps(campaignId),
         api.campaigns.listEnrollments(campaignId),
         api.lists.list(),
         api.campaigns.stats(campaignId),
+        api.signals.summary(),
       ]);
       setCampaign(c);
       setSteps(s);
       setEnrollments(e);
       setLists(l);
       setStats(st);
+      setSources(srcs);
       if (s.length > 0 && selectedStepId === null) {
         setSelectedStepId(s[0].id);
       }
@@ -155,24 +161,17 @@ export default function CampaignDetailPage() {
     }
   }
 
-  async function handleEnroll(e: FormEvent) {
-    e.preventDefault();
-    if (enrollListId === "") return;
-    setEnrolling(true);
+  async function handleAudienceEnroll(leadIds: number[]) {
     setEnrollMsg(null);
     try {
-      const r = await api.campaigns.enrollFromList(
-        campaignId,
-        Number(enrollListId),
-      );
+      const r = await api.campaigns.audienceEnroll(campaignId, leadIds);
       setEnrollMsg(
         `Zapisano ${r.enrolled}, pominięto duplikaty ${r.skipped_already_enrolled}`,
       );
+      setShowBuilder(false);
       await refresh();
     } catch (err) {
       setEnrollMsg(err instanceof ApiError ? `Błąd: ${err.detail}` : "Błąd");
-    } finally {
-      setEnrolling(false);
     }
   }
 
@@ -363,39 +362,13 @@ export default function CampaignDetailPage() {
 
         {showEnrollments && (
           <div className="space-y-3 p-4">
-            <div className="flex flex-wrap items-end gap-3">
-              <form onSubmit={handleEnroll} className="flex items-end gap-2">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700">
-                    Wybierz listę
-                  </label>
-                  <select
-                    value={enrollListId}
-                    onChange={(e) =>
-                      setEnrollListId(
-                        e.target.value === ""
-                          ? ""
-                          : Number(e.target.value),
-                      )
-                    }
-                    className="mt-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
-                  >
-                    <option value="">— wybierz —</option>
-                    {lists.map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.name} ({l.leads_count})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <button
-                  type="submit"
-                  disabled={enrollListId === "" || enrolling}
-                  className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-800 disabled:opacity-50"
-                >
-                  {enrolling ? "Zapisuję..." : "Zapisz wszystkich"}
-                </button>
-              </form>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => setShowBuilder(!showBuilder)}
+                className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-800"
+              >
+                {showBuilder ? "Zwiń builder" : "+ Dobierz leady"}
+              </button>
 
               <button
                 onClick={handleSendDueNow}
@@ -406,6 +379,16 @@ export default function CampaignDetailPage() {
                 {sending ? "Wysyłam..." : "Wyślij due teraz"}
               </button>
             </div>
+
+            {showBuilder && (
+              <AudienceBuilder
+                campaignId={campaignId}
+                lists={lists}
+                sources={sources}
+                onEnroll={handleAudienceEnroll}
+                onCancel={() => setShowBuilder(false)}
+              />
+            )}
 
             {enrollMsg && (
               <p className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-700">
@@ -977,6 +960,433 @@ function StepEditor({
         {saving ? "Zapisywanie..." : dirty ? "Zapisz zmiany" : "Bez zmian"}
       </button>
     </form>
+  );
+}
+
+function AudienceBuilder({
+  campaignId,
+  lists,
+  sources,
+  onEnroll,
+  onCancel,
+}: {
+  campaignId: number;
+  lists: LeadList[];
+  sources: SignalSummary[];
+  onEnroll: (leadIds: number[]) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [includeListIds, setIncludeListIds] = useState<number[]>([]);
+  const [excludeListIds, setExcludeListIds] = useState<number[]>([]);
+  const [tiers, setTiers] = useState<number[]>([]);
+  const [minStrength, setMinStrength] = useState<number | null>(null);
+  const [sourceIds, setSourceIds] = useState<number[]>([]);
+  const [titleQuery, setTitleQuery] = useState("");
+
+  const [preview, setPreview] = useState<AudiencePreview | null>(null);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [loading, setLoading] = useState(false);
+  const [enrolling, setEnrolling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function toggleInSet<T>(set: T[], value: T): T[] {
+    return set.includes(value)
+      ? set.filter((x) => x !== value)
+      : [...set, value];
+  }
+
+  async function handlePreview() {
+    setLoading(true);
+    setError(null);
+    setPreview(null);
+    try {
+      const criteria: AudienceCriteria = {
+        include_list_ids: includeListIds.length ? includeListIds : undefined,
+        exclude_list_ids: excludeListIds.length ? excludeListIds : undefined,
+        tiers: tiers.length ? tiers : undefined,
+        min_source_strength: minStrength,
+        signal_source_ids: sourceIds.length ? sourceIds : undefined,
+        signal_title_query: titleQuery.trim() || undefined,
+      };
+      const p = await api.campaigns.audiencePreview(campaignId, criteria);
+      setPreview(p);
+      // Default: select all non-enrolled
+      setSelected(
+        new Set(
+          p.leads.filter((l) => !l.already_enrolled).map((l) => l.id),
+        ),
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Błąd");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleEnroll() {
+    if (selected.size === 0) return;
+    setEnrolling(true);
+    try {
+      await onEnroll(Array.from(selected));
+    } finally {
+      setEnrolling(false);
+    }
+  }
+
+  function toggleSelect(id: number) {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelected(next);
+  }
+
+  function selectAll() {
+    if (!preview) return;
+    setSelected(
+      new Set(
+        preview.leads.filter((l) => !l.already_enrolled).map((l) => l.id),
+      ),
+    );
+  }
+
+  function selectNone() {
+    setSelected(new Set());
+  }
+
+  return (
+    <div className="space-y-4 rounded-lg border-2 border-gray-900 bg-white p-4">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold text-gray-900">
+          Audience builder
+        </h4>
+        <button
+          onClick={onCancel}
+          className="text-xs text-gray-500 hover:text-gray-900"
+        >
+          ✕ Zamknij
+        </button>
+      </div>
+
+      {/* Include lists */}
+      <div>
+        <p className="mb-2 text-xs font-medium uppercase text-gray-500">
+          Włącz listy
+        </p>
+        {lists.length === 0 ? (
+          <p className="text-xs text-gray-400">Brak list</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {lists.map((l) => {
+              const on = includeListIds.includes(l.id);
+              return (
+                <button
+                  key={l.id}
+                  type="button"
+                  onClick={() =>
+                    setIncludeListIds(toggleInSet(includeListIds, l.id))
+                  }
+                  className={
+                    "rounded-full px-3 py-1 text-xs border transition " +
+                    (on
+                      ? "bg-gray-900 text-white border-gray-900"
+                      : "bg-white text-gray-700 border-gray-300 hover:border-gray-500")
+                  }
+                >
+                  {l.name} ({l.leads_count})
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Exclude lists */}
+      <div>
+        <p className="mb-2 text-xs font-medium uppercase text-gray-500">
+          Wyklucz listy
+        </p>
+        {lists.length === 0 ? (
+          <p className="text-xs text-gray-400">—</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {lists.map((l) => {
+              const on = excludeListIds.includes(l.id);
+              return (
+                <button
+                  key={l.id}
+                  type="button"
+                  onClick={() =>
+                    setExcludeListIds(toggleInSet(excludeListIds, l.id))
+                  }
+                  className={
+                    "rounded-full px-3 py-1 text-xs border transition " +
+                    (on
+                      ? "bg-red-600 text-white border-red-600"
+                      : "bg-white text-gray-700 border-gray-300 hover:border-gray-500")
+                  }
+                >
+                  {l.name}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Tier */}
+      <div>
+        <p className="mb-2 text-xs font-medium uppercase text-gray-500">
+          Tier (puste = wszystkie)
+        </p>
+        <div className="flex gap-2">
+          {[1, 2, 3].map((t) => {
+            const on = tiers.includes(t);
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTiers(toggleInSet(tiers, t))}
+                className={
+                  "rounded-full px-3 py-1 text-xs border transition " +
+                  (on
+                    ? t === 1
+                      ? "bg-emerald-600 text-white border-emerald-600"
+                      : t === 2
+                        ? "bg-amber-600 text-white border-amber-600"
+                        : "bg-gray-600 text-white border-gray-600"
+                    : "bg-white text-gray-700 border-gray-300 hover:border-gray-500")
+                }
+              >
+                Tier {t}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Min source strength */}
+      <div>
+        <p className="mb-2 text-xs font-medium uppercase text-gray-500">
+          Min. siła sygnału (źródła)
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setMinStrength(null)}
+            className={
+              "rounded-full px-3 py-1 text-xs border transition " +
+              (minStrength === null
+                ? "bg-gray-900 text-white border-gray-900"
+                : "bg-white text-gray-700 border-gray-300")
+            }
+          >
+            dowolna
+          </button>
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => setMinStrength(n)}
+              className={
+                "rounded-full px-3 py-1 text-xs border transition " +
+                (minStrength === n
+                  ? "bg-gray-900 text-white border-gray-900"
+                  : "bg-white text-gray-700 border-gray-300 hover:border-gray-500")
+              }
+            >
+              ≥ {n}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Signal sources */}
+      <div>
+        <p className="mb-2 text-xs font-medium uppercase text-gray-500">
+          Konkretne źródła sygnałów
+        </p>
+        {sources.length === 0 ? (
+          <p className="text-xs text-gray-400">Brak źródeł</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {sources.map((s) => {
+              const on = sourceIds.includes(s.source_id);
+              return (
+                <button
+                  key={s.source_id}
+                  type="button"
+                  onClick={() =>
+                    setSourceIds(toggleInSet(sourceIds, s.source_id))
+                  }
+                  className={
+                    "rounded-full px-3 py-1 text-xs border transition " +
+                    (on
+                      ? "bg-gray-900 text-white border-gray-900"
+                      : "bg-white text-gray-700 border-gray-300 hover:border-gray-500")
+                  }
+                  title={`${s.signals_count} detekcji · ${s.unique_companies} firm`}
+                >
+                  {s.source_name}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Title query */}
+      <div>
+        <p className="mb-2 text-xs font-medium uppercase text-gray-500">
+          Fraza w tytule sygnału
+        </p>
+        <input
+          type="search"
+          value={titleQuery}
+          onChange={(e) => setTitleQuery(e.target.value)}
+          placeholder="np. HR Manager, Pracownik produkcji"
+          className="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+        />
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-3 border-t border-gray-200 pt-3">
+        <button
+          type="button"
+          onClick={handlePreview}
+          disabled={loading}
+          className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-800 disabled:opacity-50"
+        >
+          {loading ? "Szukam..." : "Pokaż pasujących"}
+        </button>
+        {error && (
+          <p className="rounded-md bg-red-50 px-3 py-1.5 text-sm text-red-700">
+            {error}
+          </p>
+        )}
+      </div>
+
+      {/* Preview */}
+      {preview && (
+        <div className="space-y-2 border-t border-gray-200 pt-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-gray-600">
+              {preview.matched_total} pasuje · {preview.already_enrolled_count}{" "}
+              już zenrollowanych · {selected.size} zaznaczonych
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={selectAll}
+                className="text-xs text-gray-600 hover:text-gray-900 underline"
+              >
+                Zaznacz wszystkich
+              </button>
+              <button
+                type="button"
+                onClick={selectNone}
+                className="text-xs text-gray-600 hover:text-gray-900 underline"
+              >
+                Odznacz wszystkich
+              </button>
+            </div>
+          </div>
+
+          {preview.leads.length === 0 ? (
+            <p className="rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-500">
+              Nic nie pasuje do filtrów.
+            </p>
+          ) : (
+            <div className="max-h-80 overflow-y-auto rounded-md border border-gray-200">
+              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                <thead className="sticky top-0 bg-gray-50">
+                  <tr>
+                    <th className="w-8 px-2 py-1.5"></th>
+                    <th className="px-2 py-1.5 text-left font-medium text-gray-700">
+                      Lead
+                    </th>
+                    <th className="px-2 py-1.5 text-left font-medium text-gray-700">
+                      Firma
+                    </th>
+                    <th className="px-2 py-1.5 text-left font-medium text-gray-700">
+                      Lista
+                    </th>
+                    <th className="px-2 py-1.5 text-right font-medium text-gray-700">
+                      Tier
+                    </th>
+                    <th className="px-2 py-1.5 text-right font-medium text-gray-700">
+                      Sig
+                    </th>
+                    <th className="px-2 py-1.5 text-right font-medium text-gray-700">
+                      Score
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {preview.leads.map((l: AudienceLead) => (
+                    <tr
+                      key={l.id}
+                      className={l.already_enrolled ? "opacity-50" : ""}
+                    >
+                      <td className="px-2 py-1.5">
+                        <input
+                          type="checkbox"
+                          disabled={l.already_enrolled}
+                          checked={selected.has(l.id)}
+                          onChange={() => toggleSelect(l.id)}
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <div className="text-gray-900">{l.email}</div>
+                        {(l.first_name || l.last_name) && (
+                          <div className="text-xs text-gray-500">
+                            {[l.first_name, l.last_name]
+                              .filter(Boolean)
+                              .join(" ")}
+                          </div>
+                        )}
+                        {l.already_enrolled && (
+                          <div className="text-xs text-amber-600">
+                            ✓ już w kampanii
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5 text-gray-700">
+                        {l.company || "—"}
+                      </td>
+                      <td className="px-2 py-1.5 text-xs text-gray-600">
+                        {l.list_name}
+                      </td>
+                      <td className="px-2 py-1.5 text-right">
+                        <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs">
+                          T{l.tier}
+                        </span>
+                      </td>
+                      <td className="px-2 py-1.5 text-right text-gray-700">
+                        {l.signals_count}
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-mono">
+                        {l.score}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={handleEnroll}
+            disabled={enrolling || selected.size === 0}
+            className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {enrolling
+              ? "Zapisuję..."
+              : `Zapisz zaznaczonych (${selected.size})`}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

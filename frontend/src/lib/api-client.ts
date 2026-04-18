@@ -175,6 +175,36 @@ export type CampaignStats = {
   steps: StepStats[];
 };
 
+export type AudienceCriteria = {
+  include_list_ids?: number[];
+  exclude_list_ids?: number[];
+  tiers?: number[];
+  min_source_strength?: number | null;
+  signal_source_ids?: number[];
+  signal_title_query?: string | null;
+};
+
+export type AudienceLead = {
+  id: number;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  company: string | null;
+  title: string | null;
+  score: number;
+  tier: 1 | 2 | 3;
+  list_id: number;
+  list_name: string;
+  signals_count: number;
+  already_enrolled: boolean;
+};
+
+export type AudiencePreview = {
+  leads: AudienceLead[];
+  matched_total: number;
+  already_enrolled_count: number;
+};
+
 // ---------- Signals ----------
 
 export type SourceType =
@@ -513,6 +543,18 @@ export const api = {
 
     stats: (campaignId: number) =>
       authed<CampaignStats>(`/campaigns/${campaignId}/stats`),
+
+    audiencePreview: (campaignId: number, criteria: AudienceCriteria) =>
+      authed<AudiencePreview>(`/campaigns/${campaignId}/audience/preview`, {
+        method: "POST",
+        body: JSON.stringify(criteria),
+      }),
+
+    audienceEnroll: (campaignId: number, leadIds: number[]) =>
+      authed<EnrollResult>(`/campaigns/${campaignId}/audience/enroll`, {
+        method: "POST",
+        body: JSON.stringify({ lead_ids: leadIds }),
+      }),
   },
 
   // Signal sources

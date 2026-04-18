@@ -167,6 +167,251 @@ async def delete_step(db: AsyncSession, step: SequenceStep) -> None:
 # ---------- Enrollments ----------
 
 
+def _tier_for_score(score: int) -> int:
+    if score > 100:
+        return 1
+    if score > 20:
+        return 2
+    return 3
+
+
+def _compute_source_strength(
+    signals_count: int,
+    linked_signals_count: int,
+    pipeline_impact: int,
+    latest_signal_at,
+) -> int:
+    """Mirror of frontend computeStrength — returns 0-5 based on freshness,
+    hit-rate and cumulative score impact. Kept in sync manually for now."""
+    from datetime import datetime, timezone
+
+    if signals_count == 0:
+        return 0
+
+    if latest_signal_at is None:
+        fresh = 1
+    else:
+        days = (
+            datetime.now(timezone.utc) - latest_signal_at
+        ).total_seconds() / 86400
+        if days < 1:
+            fresh = 5
+        elif days < 7:
+            fresh = 4
+        elif days < 30:
+            fresh = 3
+        elif days < 90:
+            fresh = 2
+        else:
+            fresh = 1
+
+    hit_rate = linked_signals_count / signals_count
+    if hit_rate > 0.5:
+        hit = 5
+    elif hit_rate > 0.3:
+        hit = 4
+    elif hit_rate > 0.15:
+        hit = 3
+    elif hit_rate > 0.05:
+        hit = 2
+    else:
+        hit = 1
+
+    if pipeline_impact > 500:
+        impact = 5
+    elif pipeline_impact > 100:
+        impact = 4
+    elif pipeline_impact > 50:
+        impact = 3
+    elif pipeline_impact > 10:
+        impact = 2
+    else:
+        impact = 1
+
+    return round((fresh + hit + impact) / 3)
+
+
+async def audience_preview(
+    db: AsyncSession, user_id: int, campaign_id: int, criteria
+) -> dict:
+    """Returns leads matching the audience criteria, with already_enrolled hint."""
+    from app.models.signal import Signal
+    from app.models.signal_source import SignalSource
+    from app.services.signals import list_summaries_for_user
+
+    # 1. Resolve source_ids passing min_source_strength filter
+    allowed_source_ids: set[int] | None = None
+    if criteria.min_source_strength is not None:
+        summaries = await list_summaries_for_user(db, user_id)
+        allowed_source_ids = set()
+        for s in summaries:
+            strength = _compute_source_strength(
+                s["signals_count"],
+                s["linked_signals_count"],
+                s["pipeline_impact"],
+                s["latest_signal_at"],
+            )
+            if strength >= criteria.min_source_strength:
+                allowed_source_ids.add(s["source_id"])
+
+    # Union with explicit signal_source_ids (OR semantics for source-based filters)
+    effective_source_ids: set[int] | None = None
+    if criteria.signal_source_ids:
+        explicit = set(criteria.signal_source_ids)
+        if allowed_source_ids is not None:
+            effective_source_ids = explicit | allowed_source_ids
+        else:
+            effective_source_ids = explicit
+    elif allowed_source_ids is not None:
+        effective_source_ids = allowed_source_ids
+
+    # 2. Build base query of user's leads
+    stmt = (
+        select(Lead, LeadList.name)
+        .join(LeadList, LeadList.id == Lead.list_id)
+        .where(LeadList.user_id == user_id)
+    )
+
+    if criteria.include_list_ids:
+        stmt = stmt.where(Lead.list_id.in_(criteria.include_list_ids))
+
+    if criteria.exclude_list_ids:
+        stmt = stmt.where(~Lead.list_id.in_(criteria.exclude_list_ids))
+
+    # Tier filter = score range
+    if criteria.tiers:
+        tier_conds = []
+        if 1 in criteria.tiers:
+            tier_conds.append(Lead.score > 100)
+        if 2 in criteria.tiers:
+            tier_conds.append((Lead.score > 20) & (Lead.score <= 100))
+        if 3 in criteria.tiers:
+            tier_conds.append(Lead.score <= 20)
+        if tier_conds:
+            from sqlalchemy import or_
+
+            stmt = stmt.where(or_(*tier_conds))
+
+    # Signal-based filters (EXISTS subquery)
+    if (
+        effective_source_ids is not None
+        or criteria.signal_title_query
+    ):
+        sig_subq = select(Signal.lead_id).where(
+            Signal.lead_id == Lead.id
+        )
+        if effective_source_ids is not None:
+            sig_subq = sig_subq.where(
+                Signal.source_id.in_(effective_source_ids)
+            )
+        if criteria.signal_title_query:
+            q = f"%{criteria.signal_title_query.strip()}%"
+            sig_subq = sig_subq.where(Signal.title.ilike(q))
+        # Also scope signals to user's sources
+        sig_subq = sig_subq.join(
+            SignalSource, SignalSource.id == Signal.source_id
+        ).where(SignalSource.user_id == user_id)
+        stmt = stmt.where(sig_subq.exists())
+
+    stmt = stmt.order_by(Lead.score.desc(), Lead.created_at.desc())
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    if not rows:
+        return {
+            "leads": [],
+            "matched_total": 0,
+            "already_enrolled_count": 0,
+        }
+
+    lead_ids = [r[0].id for r in rows]
+
+    # Already enrolled lookup
+    enr_stmt = select(CampaignEnrollment.lead_id).where(
+        CampaignEnrollment.campaign_id == campaign_id,
+        CampaignEnrollment.lead_id.in_(lead_ids),
+    )
+    enrolled_ids = {
+        row[0] for row in (await db.execute(enr_stmt)).all()
+    }
+
+    # Per-lead signal counts (scoped to user)
+    sig_counts_stmt = (
+        select(Signal.lead_id, func.count(Signal.id))
+        .join(SignalSource, SignalSource.id == Signal.source_id)
+        .where(
+            SignalSource.user_id == user_id,
+            Signal.lead_id.in_(lead_ids),
+        )
+        .group_by(Signal.lead_id)
+    )
+    sig_counts = {
+        row[0]: row[1] for row in (await db.execute(sig_counts_stmt)).all()
+    }
+
+    leads_out = []
+    for lead, list_name in rows:
+        leads_out.append(
+            {
+                "id": lead.id,
+                "email": lead.email,
+                "first_name": lead.first_name,
+                "last_name": lead.last_name,
+                "company": lead.company,
+                "title": lead.title,
+                "score": lead.score,
+                "tier": _tier_for_score(lead.score),
+                "list_id": lead.list_id,
+                "list_name": list_name,
+                "signals_count": sig_counts.get(lead.id, 0),
+                "already_enrolled": lead.id in enrolled_ids,
+            }
+        )
+
+    return {
+        "leads": leads_out,
+        "matched_total": len(leads_out),
+        "already_enrolled_count": len(enrolled_ids),
+    }
+
+
+async def enroll_leads(
+    db: AsyncSession,
+    user_id: int,
+    campaign_id: int,
+    lead_ids: list[int],
+) -> EnrollResult:
+    """Enroll specific lead_ids (verified to belong to user). Skips
+    duplicates via the UNIQUE constraint on (campaign_id, lead_id)."""
+    # Verify ownership — only enroll leads that belong to a list owned by user
+    verify_stmt = (
+        select(Lead.id)
+        .join(LeadList, LeadList.id == Lead.list_id)
+        .where(LeadList.user_id == user_id, Lead.id.in_(lead_ids))
+    )
+    valid_ids = {row[0] for row in (await db.execute(verify_stmt)).all()}
+
+    enrolled = 0
+    skipped = 0
+    now = datetime.now(timezone.utc)
+    for lid in valid_ids:
+        obj = CampaignEnrollment(
+            campaign_id=campaign_id,
+            lead_id=lid,
+            current_step=0,
+            next_send_at=now,
+            status="active",
+        )
+        db.add(obj)
+        try:
+            await db.commit()
+            enrolled += 1
+        except IntegrityError:
+            await db.rollback()
+            skipped += 1
+    return EnrollResult(enrolled=enrolled, skipped_already_enrolled=skipped)
+
+
 async def enroll_from_list(
     db: AsyncSession, user_id: int, campaign_id: int, list_id: int
 ) -> EnrollResult:
