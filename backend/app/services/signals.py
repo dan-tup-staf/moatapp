@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -91,19 +91,63 @@ async def count_signals(db: AsyncSession, source_id: int) -> int:
 
 
 async def list_signals_for_user(
-    db: AsyncSession, user_id: int, limit: int = 100
+    db: AsyncSession,
+    user_id: int,
+    limit: int = 100,
+    source_id: int | None = None,
 ) -> list[tuple[Signal, SignalSource, Lead | None]]:
-    """Returns recent signals for the user (joined with source + optional lead)."""
+    """Returns recent signals for the user (joined with source + optional lead).
+    Optionally scoped to a single source_id for the drill-down view."""
     stmt = (
         select(Signal, SignalSource, Lead)
         .join(SignalSource, SignalSource.id == Signal.source_id)
         .outerjoin(Lead, Lead.id == Signal.lead_id)
         .where(SignalSource.user_id == user_id)
-        .order_by(Signal.detected_at.desc())
-        .limit(limit)
     )
+    if source_id is not None:
+        stmt = stmt.where(Signal.source_id == source_id)
+    stmt = stmt.order_by(Signal.detected_at.desc()).limit(limit)
     result = await db.execute(stmt)
     return [(row[0], row[1], row[2]) for row in result.all()]
+
+
+async def list_summaries_for_user(
+    db: AsyncSession, user_id: int
+) -> list[dict]:
+    """Aggregated per-source metrics for the /signals top-level view.
+    One SQL query with GROUP BY source_id. Uses COALESCE(company_domain,
+    payload->>'company_name') as the distinct-company key so both RSS
+    (company_domain) and pracuj.pl (payload.company_name) sources get
+    meaningful counts."""
+    company_key = func.coalesce(
+        Signal.company_domain, Signal.payload["company_name"].astext
+    )
+    pipeline_case = case(
+        (Signal.lead_id.isnot(None), Signal.score_weight), else_=0
+    )
+    linked_case = case((Signal.lead_id.isnot(None), 1), else_=0)
+
+    stmt = (
+        select(
+            SignalSource.id.label("source_id"),
+            SignalSource.name.label("source_name"),
+            SignalSource.type.label("source_type"),
+            SignalSource.enabled.label("enabled"),
+            SignalSource.last_run_at.label("last_run_at"),
+            func.count(Signal.id).label("signals_count"),
+            func.count(func.distinct(company_key)).label("unique_companies"),
+            func.coalesce(func.sum(linked_case), 0).label("linked_signals_count"),
+            func.count(func.distinct(Signal.lead_id)).label("linked_leads_count"),
+            func.coalesce(func.sum(pipeline_case), 0).label("pipeline_impact"),
+            func.max(Signal.detected_at).label("latest_signal_at"),
+        )
+        .outerjoin(Signal, Signal.source_id == SignalSource.id)
+        .where(SignalSource.user_id == user_id)
+        .group_by(SignalSource.id)
+        .order_by(SignalSource.created_at.desc())
+    )
+    result = await db.execute(stmt)
+    return [dict(row._mapping) for row in result.all()]
 
 
 async def get_signal(

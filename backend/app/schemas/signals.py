@@ -69,3 +69,24 @@ class SignalRead(BaseModel):
     payload: dict[str, Any]
     score_weight: int
     detected_at: datetime
+
+
+# ---------- Signal summary (aggregated per source) ----------
+
+
+class SignalSummary(BaseModel):
+    """Aggregated view of one signal source: how many detections, how many
+    distinct companies, how much score added to leads, how fresh, etc. Used
+    for the top-level /signals view where each card represents one source."""
+
+    source_id: int
+    source_name: str
+    source_type: SourceType
+    enabled: bool
+    signals_count: int
+    unique_companies: int
+    linked_signals_count: int
+    linked_leads_count: int
+    pipeline_impact: int
+    latest_signal_at: datetime | None
+    last_run_at: datetime | None

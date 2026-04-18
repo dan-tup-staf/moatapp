@@ -197,6 +197,20 @@ export type RunResult = {
   error: string | null;
 };
 
+export type SignalSummary = {
+  source_id: number;
+  source_name: string;
+  source_type: SourceType;
+  enabled: boolean;
+  signals_count: number;
+  unique_companies: number;
+  linked_signals_count: number;
+  linked_leads_count: number;
+  pipeline_impact: number;
+  latest_signal_at: string | null;
+  last_run_at: string | null;
+};
+
 // ---------- Dashboard ----------
 
 export type DashboardStats = {
@@ -441,8 +455,16 @@ export const api = {
 
   // Signals feed
   signals: {
-    list: (limit = 100) =>
-      authed<Signal[]>(`/signals?limit=${limit}`),
+    list: (opts: { limit?: number; sourceId?: number } = {}) => {
+      const params = new URLSearchParams();
+      params.set("limit", String(opts.limit ?? 100));
+      if (opts.sourceId !== undefined) {
+        params.set("source_id", String(opts.sourceId));
+      }
+      return authed<Signal[]>(`/signals?${params.toString()}`);
+    },
+
+    summary: () => authed<SignalSummary[]>("/signals/summary"),
 
     delete: (id: number) =>
       authed<void>(`/signals/${id}`, { method: "DELETE" }),
