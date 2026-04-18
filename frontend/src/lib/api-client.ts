@@ -197,6 +197,32 @@ export type RunResult = {
   error: string | null;
 };
 
+export type CompanyRow = {
+  company: string;
+  leads_count: number;
+  total_score: number;
+  highest_status: string;
+  signals_count: number;
+  active_enrollments: number;
+  last_message_sent_at: string | null;
+};
+
+export type PersonRow = {
+  id: number;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  company: string | null;
+  title: string | null;
+  status: string;
+  score: number;
+  list_id: number;
+  list_name: string;
+  signals_count: number;
+  last_message_sent_at: string | null;
+  created_at: string;
+};
+
 export type SignalSummary = {
   source_id: number;
   source_name: string;
@@ -475,5 +501,13 @@ export const api = {
     stats: () => authed<DashboardStats>("/dashboard/stats"),
     hotLeads: (limit = 10) =>
       authed<HotLead[]>(`/dashboard/hot-leads?limit=${limit}`),
+  },
+
+  // CRM aggregates (cross-list views for Listy tabs)
+  companies: {
+    list: () => authed<CompanyRow[]>("/companies"),
+  },
+  people: {
+    list: () => authed<PersonRow[]>("/people"),
   },
 };

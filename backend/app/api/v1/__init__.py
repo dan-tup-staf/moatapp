@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.v1 import (
     auth,
     campaigns,
+    crm,
     dashboard,
     health,
     leads,
@@ -20,3 +21,4 @@ api_router.include_router(campaigns.router)
 api_router.include_router(signal_sources.router)
 api_router.include_router(signals.router)
 api_router.include_router(dashboard.router)
+api_router.include_router(crm.router)
