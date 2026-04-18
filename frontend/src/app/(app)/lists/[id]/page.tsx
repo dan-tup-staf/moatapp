@@ -29,6 +29,10 @@ export default function ListDetailPage() {
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
 
+  // Inline edit header
+  const [editingField, setEditingField] = useState<"name" | "desc" | null>(null);
+  const [draftValue, setDraftValue] = useState("");
+
   async function refresh() {
     try {
       const [l, lds] = await Promise.all([
@@ -114,6 +118,44 @@ export default function ListDetailPage() {
     }
   }
 
+  async function saveField(field: "name" | "desc", value: string) {
+    if (!list) return;
+    const trimmed = value.trim();
+    // Noop if unchanged or name emptied
+    if (field === "name") {
+      if (!trimmed || trimmed === list.name) {
+        setEditingField(null);
+        return;
+      }
+      try {
+        await api.lists.update(list.id, { name: trimmed });
+        await refresh();
+      } catch (err) {
+        alert(err instanceof ApiError ? err.detail : "Błąd zapisu");
+      }
+    } else {
+      // description — pusty string = wyczyść
+      const next = trimmed || undefined;
+      if (next === (list.description ?? undefined)) {
+        setEditingField(null);
+        return;
+      }
+      try {
+        await api.lists.update(list.id, { description: trimmed });
+        await refresh();
+      } catch (err) {
+        alert(err instanceof ApiError ? err.detail : "Błąd zapisu");
+      }
+    }
+    setEditingField(null);
+  }
+
+  function startEdit(field: "name" | "desc") {
+    if (!list) return;
+    setEditingField(field);
+    setDraftValue(field === "name" ? list.name : list.description ?? "");
+  }
+
   if (loading) {
     return <p className="text-sm text-gray-500">Ładowanie...</p>;
   }
@@ -125,9 +167,70 @@ export default function ListDetailPage() {
         <Link href="/lists" className="text-sm text-gray-500 hover:underline">
           ← Wszystkie listy
         </Link>
-        <h2 className="mt-1 text-2xl font-bold tracking-tight">{list.name}</h2>
-        {list.description && (
-          <p className="mt-1 text-sm text-gray-600">{list.description}</p>
+        {editingField === "name" ? (
+          <input
+            autoFocus
+            type="text"
+            value={draftValue}
+            maxLength={255}
+            onChange={(e) => setDraftValue(e.target.value)}
+            onBlur={() => saveField("name", draftValue)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.currentTarget.blur();
+              } else if (e.key === "Escape") {
+                setEditingField(null);
+              }
+            }}
+            className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1 text-2xl font-bold tracking-tight focus:border-gray-900 focus:outline-none"
+          />
+        ) : (
+          <h2
+            onClick={() => startEdit("name")}
+            className="group mt-1 inline-flex cursor-text items-center gap-2 rounded-md text-2xl font-bold tracking-tight hover:bg-gray-100 px-1 -mx-1"
+            title="Kliknij aby zmienić nazwę"
+          >
+            {list.name}
+            <span className="text-xs font-normal text-gray-400 opacity-0 group-hover:opacity-100">
+              ✎
+            </span>
+          </h2>
+        )}
+        {editingField === "desc" ? (
+          <input
+            autoFocus
+            type="text"
+            value={draftValue}
+            placeholder="Opis listy (pusty = usuń)"
+            onChange={(e) => setDraftValue(e.target.value)}
+            onBlur={() => saveField("desc", draftValue)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.currentTarget.blur();
+              } else if (e.key === "Escape") {
+                setEditingField(null);
+              }
+            }}
+            className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1 text-sm"
+          />
+        ) : list.description ? (
+          <p
+            onClick={() => startEdit("desc")}
+            className="group mt-1 inline-flex cursor-text items-center gap-2 rounded-md px-1 -mx-1 text-sm text-gray-600 hover:bg-gray-100"
+            title="Kliknij aby zmienić opis"
+          >
+            {list.description}
+            <span className="text-xs text-gray-400 opacity-0 group-hover:opacity-100">
+              ✎
+            </span>
+          </p>
+        ) : (
+          <button
+            onClick={() => startEdit("desc")}
+            className="mt-1 text-xs text-gray-400 hover:text-gray-700"
+          >
+            + dodaj opis
+          </button>
         )}
         <p className="mt-1 text-sm text-gray-400">
           {leads.length} {leads.length === 1 ? "lead" : "leadów"}
