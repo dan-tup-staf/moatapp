@@ -5,7 +5,7 @@ import { AuthProvider } from "@/contexts/auth-context";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MOATAPP",
+  title: "MOATION",
   description: "Prospecting + buying signals",
 };
 

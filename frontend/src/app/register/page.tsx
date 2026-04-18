@@ -38,7 +38,7 @@ export default function RegisterPage() {
       <div className="w-full max-w-sm space-y-6 rounded-lg bg-white p-8 shadow">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Załóż konto</h1>
-          <p className="mt-1 text-sm text-gray-500">w MOATAPP</p>
+          <p className="mt-1 text-sm text-gray-500">w MOATION</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

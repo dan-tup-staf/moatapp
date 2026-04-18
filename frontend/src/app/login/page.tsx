@@ -35,7 +35,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm space-y-6 rounded-lg bg-white p-8 shadow">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Zaloguj się</h1>
-          <p className="mt-1 text-sm text-gray-500">do MOATAPP</p>
+          <p className="mt-1 text-sm text-gray-500">do MOATION</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

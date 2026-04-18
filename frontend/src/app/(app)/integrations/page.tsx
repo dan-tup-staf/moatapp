@@ -125,7 +125,7 @@ export default function IntegrationsPage() {
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Integracje</h2>
         <p className="mt-1 text-sm text-gray-600">
-          Zewnętrzne systemy które będą podłączone do MOATAPP
+          Zewnętrzne systemy które będą podłączone do MOATION
         </p>
       </div>
 
@@ -206,7 +206,7 @@ function IntegrationCard({
           {i.push.length > 0 && (
             <div>
               <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
-                Push (MOATAPP → {i.name})
+                Push (MOATION → {i.name})
               </p>
               <ul className="space-y-1 text-gray-700">
                 {i.push.map((p) => (
@@ -221,7 +221,7 @@ function IntegrationCard({
           {i.pull.length > 0 && (
             <div>
               <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
-                Pull ({i.name} → MOATAPP)
+                Pull ({i.name} → MOATION)
               </p>
               <ul className="space-y-1 text-gray-700">
                 {i.pull.map((p) => (

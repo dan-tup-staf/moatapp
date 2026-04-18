@@ -1,4 +1,4 @@
-# MOATAPP
+# MOATION
 
 Narzędzie do prospectingu (cold outreach) połączone z silnikiem sygnałów zakupowych (buying signals / intent data).
 
