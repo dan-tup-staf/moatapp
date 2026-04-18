@@ -91,36 +91,43 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
         return None
 
     step = steps[enr.current_step]
-    subject = render_template(step.subject, lead)
-    body = render_template(step.body_template, lead)
 
-    msg = Message(
-        enrollment_id=enr.id,
-        step_id=step.id,
-        subject=subject,
-        body=body,
-        to_email=lead.email,
-        from_email=campaign.from_email,
-        status="sent",
-    )
-    db.add(msg)
+    # Non-email channels (LinkedIn visit/invite/message) are visual-only for
+    # MVP — we record nothing and just advance the enrollment so the sequence
+    # doesn't get stuck. User handles LinkedIn manually via the UI.
+    if step.channel != "email":
+        msg = None
+    else:
+        subject = render_template(step.subject, lead)
+        body = render_template(step.body_template, lead)
 
-    try:
-        await _send_via_smtp(
-            to_email=lead.email,
-            from_email=campaign.from_email,
-            from_name=campaign.from_name,
+        msg = Message(
+            enrollment_id=enr.id,
+            step_id=step.id,
             subject=subject,
             body=body,
+            to_email=lead.email,
+            from_email=campaign.from_email,
+            status="sent",
         )
-        msg.sent_at = datetime.now(timezone.utc)
-        msg.status = "sent"
-        if lead.status == "new":
-            lead.status = "contacted"
-    except Exception as e:
-        logger.exception("SMTP send failed for enrollment %s", enr.id)
-        msg.status = "failed"
-        msg.error = str(e)[:1000]
+        db.add(msg)
+
+        try:
+            await _send_via_smtp(
+                to_email=lead.email,
+                from_email=campaign.from_email,
+                from_name=campaign.from_name,
+                subject=subject,
+                body=body,
+            )
+            msg.sent_at = datetime.now(timezone.utc)
+            msg.status = "sent"
+            if lead.status == "new":
+                lead.status = "contacted"
+        except Exception as e:
+            logger.exception("SMTP send failed for enrollment %s", enr.id)
+            msg.status = "failed"
+            msg.error = str(e)[:1000]
 
     # Advance to the next step (or mark completed)
     next_idx = enr.current_step + 1
@@ -135,7 +142,8 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
     enr.current_step = next_idx
 
     await db.commit()
-    await db.refresh(msg)
+    if msg is not None:
+        await db.refresh(msg)
     return msg
 
 

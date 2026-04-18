@@ -18,3 +18,10 @@ class SequenceStep(Base):
     body_template: Mapped[str] = mapped_column(Text, nullable=False)
     # Days to wait after the previous step (or after enrollment, for step 0)
     delay_days: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Channel discriminator — email is the only one we execute automatically.
+    # linkedin_* channels are visual-only; worker skips them and advances the
+    # enrollment without sending anything. User handles LinkedIn manually.
+    channel: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="email"
+    )

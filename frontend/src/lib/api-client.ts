@@ -95,6 +95,12 @@ export type CampaignUpdate = Partial<CampaignCreate> & {
   status?: CampaignStatus;
 };
 
+export type StepChannel =
+  | "email"
+  | "linkedin_visit"
+  | "linkedin_invite"
+  | "linkedin_message";
+
 export type SequenceStep = {
   id: number;
   campaign_id: number;
@@ -102,6 +108,7 @@ export type SequenceStep = {
   subject: string;
   body_template: string;
   delay_days: number;
+  channel: StepChannel;
 };
 
 export type StepCreate = {
@@ -109,6 +116,7 @@ export type StepCreate = {
   subject: string;
   body_template: string;
   delay_days: number;
+  channel?: StepChannel;
 };
 
 export type StepUpdate = Partial<StepCreate>;

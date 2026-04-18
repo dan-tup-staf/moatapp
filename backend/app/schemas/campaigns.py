@@ -11,6 +11,13 @@ class CampaignStatus(str, Enum):
     ARCHIVED = "archived"
 
 
+class StepChannel(str, Enum):
+    EMAIL = "email"
+    LINKEDIN_VISIT = "linkedin_visit"
+    LINKEDIN_INVITE = "linkedin_invite"
+    LINKEDIN_MESSAGE = "linkedin_message"
+
+
 class EnrollmentStatus(str, Enum):
     ACTIVE = "active"
     COMPLETED = "completed"
@@ -27,6 +34,7 @@ class StepCreate(BaseModel):
     subject: str = Field(min_length=1, max_length=255)
     body_template: str = Field(min_length=1)
     delay_days: int = Field(default=0, ge=0, le=365)
+    channel: StepChannel = StepChannel.EMAIL
 
 
 class StepUpdate(BaseModel):
@@ -34,6 +42,7 @@ class StepUpdate(BaseModel):
     subject: str | None = Field(default=None, min_length=1, max_length=255)
     body_template: str | None = Field(default=None, min_length=1)
     delay_days: int | None = Field(default=None, ge=0, le=365)
+    channel: StepChannel | None = None
 
 
 class StepRead(BaseModel):
@@ -45,6 +54,7 @@ class StepRead(BaseModel):
     subject: str
     body_template: str
     delay_days: int
+    channel: StepChannel
 
 
 # ---------- Campaign ----------

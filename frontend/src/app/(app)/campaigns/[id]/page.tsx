@@ -14,8 +14,39 @@ import {
   LeadList,
   PreviewResponse,
   SequenceStep,
+  StepChannel,
   StepStats,
 } from "@/lib/api-client";
+
+const CHANNEL_LABELS: Record<StepChannel, string> = {
+  email: "Email",
+  linkedin_visit: "LinkedIn — wejście na profil",
+  linkedin_invite: "LinkedIn — zaproszenie",
+  linkedin_message: "LinkedIn — wiadomość",
+};
+
+const CHANNEL_BADGES: Record<StepChannel, { icon: string; label: string; cls: string }> = {
+  email: {
+    icon: "📧",
+    label: "Email",
+    cls: "bg-blue-100 text-blue-800",
+  },
+  linkedin_visit: {
+    icon: "👁",
+    label: "LI · wizyta",
+    cls: "bg-sky-100 text-sky-800",
+  },
+  linkedin_invite: {
+    icon: "➕",
+    label: "LI · zaproszenie",
+    cls: "bg-sky-100 text-sky-800",
+  },
+  linkedin_message: {
+    icon: "💬",
+    label: "LI · wiadomość",
+    cls: "bg-sky-100 text-sky-800",
+  },
+};
 
 const STATUS_OPTIONS: CampaignStatus[] = [
   "draft",
@@ -614,6 +645,9 @@ function StepCardCompact({
   isFirst: boolean;
   onClick: () => void;
 }) {
+  const channel = CHANNEL_BADGES[step.channel];
+  const isEmail = step.channel === "email";
+
   return (
     <button
       onClick={onClick}
@@ -634,20 +668,32 @@ function StepCardCompact({
           {"d"}
         </span>
       </div>
+      <div className="mt-2">
+        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${channel.cls}`}>
+          <span>{channel.icon}</span>
+          <span>{channel.label}</span>
+        </span>
+      </div>
       <p className="mt-2 line-clamp-2 text-sm font-medium text-gray-900">
         {step.subject}
       </p>
       <p className="mt-1 line-clamp-2 whitespace-pre-wrap font-mono text-xs text-gray-500">
         {step.body_template}
       </p>
-      <div className="mt-2 flex items-center gap-3 text-xs">
-        <span className="text-emerald-700">
-          ✓ {stats?.sent_count ?? 0}
-        </span>
-        {stats && stats.failed_count > 0 && (
-          <span className="text-red-600">✗ {stats.failed_count}</span>
-        )}
-      </div>
+      {isEmail ? (
+        <div className="mt-2 flex items-center gap-3 text-xs">
+          <span className="text-emerald-700">
+            ✓ {stats?.sent_count ?? 0}
+          </span>
+          {stats && stats.failed_count > 0 && (
+            <span className="text-red-600">✗ {stats.failed_count}</span>
+          )}
+        </div>
+      ) : (
+        <div className="mt-2 text-xs text-gray-400">
+          manual — user wykonuje
+        </div>
+      )}
     </button>
   );
 }
@@ -662,6 +708,7 @@ function AddStepButton({
   onCreated: (id: number) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
+  const [channel, setChannel] = useState<StepChannel>("email");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [delay, setDelay] = useState(0);
@@ -678,7 +725,9 @@ function AddStepButton({
         subject,
         body_template: body,
         delay_days: delay,
+        channel,
       });
+      setChannel("email");
       setSubject("");
       setBody("");
       setDelay(0);
@@ -720,12 +769,27 @@ function AddStepButton({
           ✕
         </button>
       </div>
+      <select
+        value={channel}
+        onChange={(e) => setChannel(e.target.value as StepChannel)}
+        className="block w-full rounded-md border border-gray-300 px-2 py-1 text-xs"
+      >
+        {(Object.keys(CHANNEL_LABELS) as StepChannel[]).map((c) => (
+          <option key={c} value={c}>
+            {CHANNEL_LABELS[c]}
+          </option>
+        ))}
+      </select>
       <input
         type="text"
         required
         value={subject}
         onChange={(e) => setSubject(e.target.value)}
-        placeholder="Subject (np. Quick q, {{first_name}})"
+        placeholder={
+          channel === "email"
+            ? "Subject (np. Quick q, {{first_name}})"
+            : "Tytuł / notatka wewnętrzna"
+        }
         className="block w-full rounded-md border border-gray-300 px-2 py-1 text-xs font-mono"
       />
       <textarea
@@ -733,7 +797,15 @@ function AddStepButton({
         value={body}
         onChange={(e) => setBody(e.target.value)}
         rows={4}
-        placeholder="Body — {{first_name}} {{company}} ..."
+        placeholder={
+          channel === "email"
+            ? "Body — {{first_name}} {{company}} ..."
+            : channel === "linkedin_invite"
+              ? "Treść notki do zaproszenia (max ~300 znaków)"
+              : channel === "linkedin_message"
+                ? "Treść wiadomości do wysłania ręcznie"
+                : "Notatka (np. 'sprawdź ostatnie posty')"
+        }
         className="block w-full rounded-md border border-gray-300 px-2 py-1 text-xs font-mono"
       />
       <div className="flex items-center gap-2">
@@ -771,6 +843,7 @@ function StepEditor({
   onSaved: () => Promise<void>;
   onDeleted: () => Promise<void>;
 }) {
+  const [channel, setChannel] = useState<StepChannel>(step.channel);
   const [subject, setSubject] = useState(step.subject);
   const [body, setBody] = useState(step.body_template);
   const [delay, setDelay] = useState(step.delay_days);
@@ -781,6 +854,7 @@ function StepEditor({
     setSaving(true);
     try {
       await api.campaigns.updateStep(campaignId, step.id, {
+        channel,
         subject,
         body_template: body,
         delay_days: delay,
@@ -804,21 +878,29 @@ function StepEditor({
   }
 
   const dirty =
+    channel !== step.channel ||
     subject !== step.subject ||
     body !== step.body_template ||
     delay !== step.delay_days;
+
+  const isEmail = channel === "email";
 
   return (
     <form onSubmit={handleSave} className="space-y-3">
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-medium text-gray-700">
           Edycja step #{step.step_order}
-          {stats && (
+          {isEmail && stats && (
             <span className="ml-2 text-xs font-normal text-gray-500">
               ✓ {stats.sent_count} wysłanych
               {stats.failed_count > 0 && (
                 <> · ✗ {stats.failed_count} błędów</>
               )}
+            </span>
+          )}
+          {!isEmail && (
+            <span className="ml-2 text-xs font-normal text-gray-500">
+              manual — user wykonuje ręcznie
             </span>
           )}
         </h4>
@@ -831,16 +913,49 @@ function StepEditor({
         </button>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="text-sm text-gray-700">Kanał:</label>
+        <select
+          value={channel}
+          onChange={(e) => setChannel(e.target.value as StepChannel)}
+          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+        >
+          {(Object.keys(CHANNEL_LABELS) as StepChannel[]).map((c) => (
+            <option key={c} value={c}>
+              {CHANNEL_LABELS[c]}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {!isEmail && (
+        <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Worker pomija tego stepa — przesuwa enrollment dalej bez wysyłki.
+          Zadanie wykonujesz ręcznie w LinkedIn, poniżej trzymamy treść do
+          skopiowania.
+        </p>
+      )}
+
       <input
         type="text"
         value={subject}
         onChange={(e) => setSubject(e.target.value)}
+        placeholder={isEmail ? "Subject" : "Tytuł / notatka wewnętrzna"}
         className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
       />
       <textarea
         value={body}
         onChange={(e) => setBody(e.target.value)}
         rows={8}
+        placeholder={
+          isEmail
+            ? "Body"
+            : channel === "linkedin_invite"
+              ? "Treść zaproszenia (max ~300 znaków)"
+              : channel === "linkedin_message"
+                ? "Treść wiadomości"
+                : "Notatka (np. 'polajkować ostatni post')"
+        }
         className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
       />
       <div className="flex items-center gap-2">
