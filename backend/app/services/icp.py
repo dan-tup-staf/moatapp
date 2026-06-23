@@ -205,6 +205,139 @@ def _parse_json_dict(text: str, what: str) -> dict:
         raise RuntimeError(f"Claude zwrócił niepoprawny format dla {what}") from e
 
 
+# ---------- Discovery: suggest dedicated signal sources from ICP ----------
+
+# Allowed web_search channels a suggestion can target (must match the scraper
+# registry / SourceType enum). pracuj.pl and RSS stay manual — they need a
+# different config shape.
+_SUGGESTABLE_CHANNELS = {
+    "linkedin",
+    "google_news",
+    "x_twitter",
+    "serp",
+    "funding",
+    "company_site",
+}
+
+# Compact domain knowledge fed to the model so the generated queries fit the
+# Polish B2B intent ecosystem instead of generic global ones.
+_PL_SIGNAL_CONTEXT = """\
+KONTEKST — polski ekosystem sygnałów zakupowych B2B (używaj go w zapytaniach):
+- Rejestry: KRS / Portal Rejestrów Sądowych (zmiana zarządu, prokury), RDF
+  (sprawozdania finansowe, capex), MSiG (połączenia/podziały/przekształcenia),
+  Rejestr Zastawów (finansowanie dłużne), UPRP/EPO (patenty), BIP-y SSE.
+- Giełda: raporty bieżące ESPI/EBI (zarząd, M&A, znaczące umowy), ESEF/CSRD.
+- Regulacje (okna zakupowe 2026): KSeF (e-faktura, wymiana ERP), NIS2/UKSC
+  (audyt, SZBI, SOC/SIEM), DORA, AI Act, CSRD, ustawa o sygnalistach.
+- Nadzór: decyzje KNF, kary UODO, wystąpienia pokontrolne NIK.
+- Finansowanie: rundy VC (mamstartup.pl, Puls Biznesu), granty NCBR (Szybka
+  Ścieżka, Bridge Alfa) / PARP SMART.
+- C-suite/rekrutacja na LinkedIn: nowy CFO/CISO/DPO/Head of AI/Country Manager,
+  fala rekrutacji GTM (BDR, AE) ~90 dni po rundzie.
+- Ekspansja DACH/UK/US: due diligence (ESPI), rejestracja GmbH (Bundesanzeiger)
+  / UK Ltd (Companies House), Country Manager, sponsoring OMR/SaaStock/Slush.
+- Media branżowe: Puls Biznesu, MyCompany Polska, ITwiz, CRN Polska, Bankier.
+"""
+
+
+async def suggest_signal_sources(icp: IcpProfile) -> list[dict]:
+    """Given a synthesized ICP, ask Claude to propose dedicated signal sources
+    (one per relevant channel) with tailored Polish-context search queries.
+
+    Returns a list of dicts: {type, name, query, rationale, score_weight,
+    max_results}. Only web_search channels are produced so each maps directly
+    to a SignalSourceCreate with config {query, max_results}."""
+    from anthropic import AsyncAnthropic
+
+    fields = icp.icp_fields or {}
+    icp_block = json.dumps(fields, ensure_ascii=False, indent=2)
+    summary = (icp.scraped_summary or "")[:2000]
+
+    client = AsyncAnthropic(api_key=_require_key())
+    try:
+        msg = await client.messages.create(
+            model=settings.anthropic_model_quality,
+            max_tokens=2000,
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        "Jesteś strategiem intent-data dla polskiego B2B. Na "
+                        "podstawie ICP użytkownika zaproponuj 6-9 DEDYKOWANYCH "
+                        "źródeł sygnałów zakupowych — po jednym precyzyjnym "
+                        "zapytaniu na źródło.\n\n"
+                        f"{_PL_SIGNAL_CONTEXT}\n"
+                        "Dozwolone wartości pola 'type' (kanał wyszukiwania):\n"
+                        "- linkedin: zmiany stanowisk, role C-suite, rekrutacja GTM\n"
+                        "- google_news: prasa, komunikaty, ESPI/EBI, regulacje\n"
+                        "- serp: rejestry (KRS/RDF/MSiG/Zastawy), BIP, granty, patenty\n"
+                        "- funding: rundy VC/PE, NCBR/PARP, M&A\n"
+                        "- x_twitter: zapowiedzi i dyskusje branżowe\n"
+                        "- company_site: monitoring stron firm z targetu\n\n"
+                        "Zwróć WYŁĄCZNIE poprawny JSON array obiektów:\n"
+                        "[{\n"
+                        '  "type": string (jeden z dozwolonych),\n'
+                        '  "name": string (krótka nazwa źródła po polsku),\n'
+                        '  "query": string (gotowe zapytanie wyszukiwania, '
+                        "konkretne — branże/role/triggery z ICP),\n"
+                        '  "rationale": string (1 zdanie: dlaczego to sygnał '
+                        "zakupowy dla tego ICP),\n"
+                        '  "score_weight": int 10-50 (siła sygnału)\n'
+                        "}]\n\n"
+                        "Bez markdown, sam JSON. Dobierz kanały do ICP — nie "
+                        "wrzucaj wszystkiego na siłę.\n\n"
+                        f"ICP (pola):\n{icp_block}\n\n"
+                        f"OPIS FIRMY UŻYTKOWNIKA:\n{summary}"
+                    ),
+                }
+            ],
+        )
+    except AnthropicNotConfigured:
+        raise
+    except Exception as e:
+        logger.exception("suggest_signal_sources failed")
+        raise RuntimeError(
+            f"Generowanie propozycji nie powiodło się: {type(e).__name__}: {e}"
+        ) from e
+
+    text = _extract_text(msg)
+    raw = _parse_json_list_of_dicts(text)
+
+    out: list[dict] = []
+    for item in raw:
+        ch = str(item.get("type", "")).strip()
+        query = str(item.get("query", "")).strip()
+        name = str(item.get("name", "")).strip()
+        if ch not in _SUGGESTABLE_CHANNELS or not query or not name:
+            continue
+        try:
+            weight = int(item.get("score_weight", 20))
+        except (TypeError, ValueError):
+            weight = 20
+        out.append(
+            {
+                "type": ch,
+                "name": name[:255],
+                "query": query,
+                "rationale": str(item.get("rationale", "")).strip(),
+                "score_weight": max(0, min(1000, weight)),
+                "max_results": 15,
+            }
+        )
+    return out
+
+
+def _parse_json_list_of_dicts(text: str) -> list[dict]:
+    try:
+        data = json.loads(_unwrap_json(text))
+    except json.JSONDecodeError as e:
+        logger.exception("suggest_signal_sources: niepoprawny JSON: %s", text[:300])
+        raise RuntimeError("Claude zwrócił niepoprawny format propozycji") from e
+    if not isinstance(data, list):
+        raise RuntimeError("Claude zwrócił niepoprawny format propozycji")
+    return [x for x in data if isinstance(x, dict)]
+
+
 # ---------- Persistence ----------
 
 

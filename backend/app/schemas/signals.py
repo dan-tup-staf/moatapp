@@ -8,10 +8,13 @@ from pydantic import BaseModel, ConfigDict, Field
 class SourceType(str, Enum):
     RSS = "rss"
     PRACUJ_PL = "pracuj_pl"
-    # placeholders for future scrapers
-    JOB_POSTING = "job_posting"
-    NEWS = "news"
-    TECH_CHANGE = "tech_change"
+    # web_search-backed channels (Claude server-side web_search)
+    LINKEDIN = "linkedin"
+    GOOGLE_NEWS = "google_news"
+    X_TWITTER = "x_twitter"
+    SERP = "serp"
+    FUNDING = "funding"
+    COMPANY_SITE = "company_site"
 
 
 # ---------- SignalSource ----------
@@ -47,9 +50,27 @@ class SignalSourceRead(BaseModel):
     signals_count: int = 0
 
 
+class SignalSourceBatchCreate(BaseModel):
+    sources: list[SignalSourceCreate] = Field(default_factory=list)
+
+
 class RunResult(BaseModel):
     new_signals: int
     error: str | None = None
+
+
+# ---------- Presets (curated PL-enterprise source templates) ----------
+
+
+class SignalSourcePreset(BaseModel):
+    key: str
+    category: str
+    category_label: str
+    name: str
+    type: SourceType
+    score_weight: int
+    description: str
+    config: dict[str, Any]
 
 
 # ---------- Signal ----------

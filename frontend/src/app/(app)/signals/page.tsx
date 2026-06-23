@@ -8,9 +8,12 @@ import { api, ApiError, SignalSummary, SourceType } from "@/lib/api-client";
 const TYPE_LABELS: Record<SourceType, string> = {
   rss: "RSS",
   pracuj_pl: "pracuj.pl",
-  job_posting: "job posting",
-  news: "news",
-  tech_change: "tech change",
+  linkedin: "LinkedIn",
+  google_news: "Google News",
+  x_twitter: "X / Twitter",
+  serp: "SERP",
+  funding: "Bazy fundingowe",
+  company_site: "Strona firmowa",
 };
 
 type StrengthFilter = "all" | "strong" | "medium" | "weak";

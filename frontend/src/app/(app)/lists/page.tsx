@@ -11,6 +11,8 @@ import {
   IcpQA,
   LeadList,
   PersonRow,
+  SourceType,
+  SuggestedSource,
 } from "@/lib/api-client";
 
 type Tab = "lists" | "companies" | "people" | "icp";
@@ -770,16 +772,198 @@ function IcpTab() {
           </div>
         </div>
       ) : (
-        // Stage 3: Editable ICP
-        <IcpEditor
-          icp={icp!}
-          saving={saving}
-          onSave={handleSaveFields}
-          onReset={handleReset}
-          onRegenerate={handleSynthesize}
-          regenerating={synthesizing}
-          qa={qa}
-        />
+        // Stage 3: Editable ICP + dedicated-signals discovery
+        <>
+          <IcpEditor
+            icp={icp!}
+            saving={saving}
+            onSave={handleSaveFields}
+            onReset={handleReset}
+            onRegenerate={handleSynthesize}
+            regenerating={synthesizing}
+            qa={qa}
+          />
+          <DiscoveryPanel />
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------- Discovery: dedicated signal sources from ICP ----------
+
+const CHANNEL_LABELS: Record<SourceType, string> = {
+  rss: "RSS",
+  pracuj_pl: "pracuj.pl",
+  linkedin: "LinkedIn",
+  google_news: "Google News",
+  x_twitter: "X / Twitter",
+  serp: "SERP",
+  funding: "Bazy fundingowe",
+  company_site: "Strona firmowa",
+};
+
+function DiscoveryPanel() {
+  const [suggestions, setSuggestions] = useState<SuggestedSource[] | null>(
+    null,
+  );
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [loading, setLoading] = useState(false);
+  const [activating, setActivating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [doneMsg, setDoneMsg] = useState<string | null>(null);
+
+  async function generate() {
+    setLoading(true);
+    setError(null);
+    setDoneMsg(null);
+    try {
+      const res = await api.icp.suggestSources();
+      setSuggestions(res.sources);
+      // pre-select all by default
+      setSelected(new Set(res.sources.map((_, i) => i)));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Błąd generowania");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function toggle(i: number) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  }
+
+  async function activate() {
+    if (!suggestions) return;
+    const chosen = suggestions.filter((_, i) => selected.has(i));
+    if (chosen.length === 0) return;
+    setActivating(true);
+    setError(null);
+    try {
+      await api.signalSources.createBatch(
+        chosen.map((s) => ({
+          name: s.name,
+          type: s.type,
+          config: { query: s.query, max_results: s.max_results },
+          score_weight: s.score_weight,
+        })),
+      );
+      setDoneMsg(
+        `Aktywowano ${chosen.length} dedykowanych źródeł sygnałów. Zobacz zakładkę „Źródła".`,
+      );
+      setSuggestions(null);
+      setSelected(new Set());
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Błąd aktywacji");
+    } finally {
+      setActivating(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900">
+            Dedykowane źródła sygnałów
+          </h3>
+          <p className="mt-0.5 text-xs text-gray-600">
+            Na podstawie Twojego ICP wygenerujemy gotowe zapytania per kanał
+            (LinkedIn, Google News, SERP, funding…). Przejrzyj, odznacz zbędne i
+            aktywuj — worker zacznie zbierać sygnały dopasowane do tej firmy.
+          </p>
+        </div>
+        <button
+          onClick={generate}
+          disabled={loading}
+          className="shrink-0 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+        >
+          {loading
+            ? "Generuję…"
+            : suggestions
+              ? "Przegeneruj"
+              : "Wygeneruj plan sygnałów"}
+        </button>
+      </div>
+
+      {error && (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+      {doneMsg && (
+        <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          {doneMsg}
+        </p>
+      )}
+
+      {suggestions && suggestions.length === 0 && (
+        <p className="text-sm text-gray-500">
+          Brak propozycji — uzupełnij ICP (branże, triggery) i spróbuj ponownie.
+        </p>
+      )}
+
+      {suggestions && suggestions.length > 0 && (
+        <>
+          <div className="space-y-2">
+            {suggestions.map((s, i) => {
+              const checked = selected.has(i);
+              return (
+                <label
+                  key={i}
+                  className={
+                    "flex cursor-pointer gap-3 rounded-lg border p-3 transition " +
+                    (checked
+                      ? "border-gray-900 bg-gray-50"
+                      : "border-gray-200 hover:border-gray-300")
+                  }
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggle(i)}
+                    className="mt-1 h-4 w-4"
+                  />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-900">
+                        {s.name}
+                      </span>
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">
+                        {CHANNEL_LABELS[s.type] ?? s.type}
+                      </span>
+                      <span className="text-[10px] text-gray-400">
+                        w:{s.score_weight}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 truncate font-mono text-xs text-gray-500">
+                      {s.query}
+                    </p>
+                    {s.rationale && (
+                      <p className="mt-0.5 text-xs text-gray-600">
+                        {s.rationale}
+                      </p>
+                    )}
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+          <button
+            onClick={activate}
+            disabled={activating || selected.size === 0}
+            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          >
+            {activating
+              ? "Aktywuję…"
+              : `Aktywuj wybrane źródła (${selected.size})`}
+          </button>
+        </>
       )}
     </div>
   );

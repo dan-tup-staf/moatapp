@@ -19,7 +19,7 @@ class SignalSource(Base):
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    # rss | job_posting | news | tech_change ...
+    # rss | pracuj_pl | linkedin | google_news | x_twitter | serp | funding | company_site
     type: Mapped[str] = mapped_column(String(32), nullable=False)
     config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

@@ -48,6 +48,22 @@ class IcpProfileRead(BaseModel):
     updated_at: datetime
 
 
+class SuggestedSource(BaseModel):
+    """A signal source proposed by the discovery flow from the user's ICP.
+    Maps 1:1 to a SignalSourceCreate when the user activates it."""
+
+    type: str  # web_search channel: linkedin | google_news | x_twitter | serp | funding | company_site
+    name: str
+    query: str
+    rationale: str
+    score_weight: int = 20
+    max_results: int = 15
+
+
+class SuggestSourcesResponse(BaseModel):
+    sources: list[SuggestedSource] = Field(default_factory=list)
+
+
 class IcpFieldsUpdate(BaseModel):
     target_industries: list[str] | None = None
     company_size: str | None = None

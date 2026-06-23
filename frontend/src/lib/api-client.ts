@@ -221,9 +221,12 @@ export type AudiencePreview = {
 export type SourceType =
   | "rss"
   | "pracuj_pl"
-  | "job_posting"
-  | "news"
-  | "tech_change";
+  | "linkedin"
+  | "google_news"
+  | "x_twitter"
+  | "serp"
+  | "funding"
+  | "company_site";
 
 export type SignalSource = {
   id: number;
@@ -267,6 +270,17 @@ export type Signal = {
 export type RunResult = {
   new_signals: number;
   error: string | null;
+};
+
+export type SignalSourcePreset = {
+  key: string;
+  category: string;
+  category_label: string;
+  name: string;
+  type: SourceType;
+  score_weight: number;
+  description: string;
+  config: Record<string, unknown>;
 };
 
 export type CompanyRow = {
@@ -390,6 +404,19 @@ export type IcpProfile = {
 export type AnalyzeUrlResponse = {
   scraped_summary: string;
   suggested_questions: string[];
+};
+
+export type SuggestedSource = {
+  type: SourceType;
+  name: string;
+  query: string;
+  rationale: string;
+  score_weight: number;
+  max_results: number;
+};
+
+export type SuggestSourcesResponse = {
+  sources: SuggestedSource[];
 };
 
 export type IcpFieldsUpdate = Partial<{
@@ -615,6 +642,14 @@ export const api = {
         body: JSON.stringify(data),
       }),
 
+    createBatch: (sources: SignalSourceCreate[]) =>
+      authed<SignalSource[]>("/signal-sources/batch", {
+        method: "POST",
+        body: JSON.stringify({ sources }),
+      }),
+
+    presets: () => authed<SignalSourcePreset[]>("/signal-sources/presets"),
+
     get: (id: number) => authed<SignalSource>(`/signal-sources/${id}`),
 
     update: (id: number, data: SignalSourceUpdate) =>
@@ -674,6 +709,10 @@ export const api = {
       authed<IcpProfile>("/icp/synthesize", {
         method: "POST",
         body: JSON.stringify({ qa }),
+      }),
+    suggestSources: () =>
+      authed<SuggestSourcesResponse>("/icp/suggest-sources", {
+        method: "POST",
       }),
     updateFields: (fields: IcpFieldsUpdate) =>
       authed<IcpProfile>("/icp", {

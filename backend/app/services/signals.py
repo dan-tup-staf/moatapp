@@ -36,6 +36,29 @@ async def create_source(
     return obj
 
 
+async def create_sources_batch(
+    db: AsyncSession, user_id: int, payloads: list[SignalSourceCreate]
+) -> list[SignalSource]:
+    """Create several sources at once (used when activating suggested/preset
+    sources). Returns the created rows."""
+    objs = [
+        SignalSource(
+            user_id=user_id,
+            name=p.name,
+            type=p.type.value if hasattr(p.type, "value") else p.type,
+            config=p.config,
+            enabled=p.enabled,
+            score_weight=p.score_weight,
+        )
+        for p in payloads
+    ]
+    db.add_all(objs)
+    await db.commit()
+    for obj in objs:
+        await db.refresh(obj)
+    return objs
+
+
 async def list_sources_with_counts(
     db: AsyncSession, user_id: int
 ) -> list[tuple[SignalSource, int]]:

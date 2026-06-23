@@ -10,6 +10,8 @@ from app.schemas.icp import (
     IcpFields,
     IcpFieldsUpdate,
     IcpProfileRead,
+    SuggestedSource,
+    SuggestSourcesResponse,
     SynthesizeRequest,
 )
 from app.services import icp as svc
@@ -102,6 +104,30 @@ async def synthesize(
         raise HTTPException(status_code=502, detail=str(e)) from e
     obj = await svc.upsert_after_synthesis(db, current.id, payload.qa, fields)
     return _to_read(obj)
+
+
+@router.post("/suggest-sources", response_model=SuggestSourcesResponse)
+async def suggest_sources(
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SuggestSourcesResponse:
+    """Discovery: from the synthesized ICP, propose dedicated signal sources
+    (tailored Polish-context search queries per channel)."""
+    icp = await svc.get_or_none(db, current.id)
+    if icp is None or not (icp.icp_fields or icp.scraped_summary):
+        raise HTTPException(
+            status_code=400,
+            detail="Najpierw wygeneruj ICP (przeanalizuj stronę firmy)",
+        )
+    try:
+        raw = await svc.suggest_signal_sources(icp)
+    except AnthropicNotConfigured as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    return SuggestSourcesResponse(
+        sources=[SuggestedSource(**s) for s in raw]
+    )
 
 
 @router.patch("", response_model=IcpProfileRead)
