@@ -144,7 +144,10 @@ class WebSearchScraper(BaseScraper):
     async def _search(self, query: str, max_results: int) -> str:
         from anthropic import AsyncAnthropic
 
-        client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+        client_kwargs: dict[str, Any] = {"api_key": settings.anthropic_api_key}
+        if settings.anthropic_base_url:
+            client_kwargs["base_url"] = settings.anthropic_base_url
+        client = AsyncAnthropic(**client_kwargs)
         label = self.meta["label"]
         hint = self.meta["hint"]
         try:

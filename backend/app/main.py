@@ -21,10 +21,19 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Bearer-token auth means we don't rely on cookies, so wildcard CORS is
+    # acceptable for hosted demos. allow_credentials must be False with "*".
+    if settings.cors_allow_all:
+        allow_origins = ["*"]
+        allow_credentials = False
+    else:
+        allow_origins = settings.cors_origins
+        allow_credentials = True
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,
+        allow_origins=allow_origins,
+        allow_credentials=allow_credentials,
         allow_methods=["*"],
         allow_headers=["*"],
     )

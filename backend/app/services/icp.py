@@ -40,6 +40,16 @@ def _require_key() -> str:
     return settings.anthropic_api_key
 
 
+def _client():
+    """Build an AsyncAnthropic client, honouring an optional base_url override."""
+    from anthropic import AsyncAnthropic
+
+    kwargs = {"api_key": _require_key()}
+    if settings.anthropic_base_url:
+        kwargs["base_url"] = settings.anthropic_base_url
+    return AsyncAnthropic(**kwargs)
+
+
 # ---------- Company research (LLM + web_search) ----------
 
 
@@ -49,9 +59,7 @@ async def research_company_with_llm(url: str) -> str:
     protection because searches happen on Anthropic's infrastructure.
 
     Returns 200-300 word Polish summary ready for question generation."""
-    from anthropic import AsyncAnthropic
-
-    client = AsyncAnthropic(api_key=_require_key())
+    client = _client()
     try:
         response = await client.messages.create(
             model=settings.anthropic_model_fast,
@@ -102,9 +110,7 @@ async def research_company_with_llm(url: str) -> str:
 
 async def generate_questions(scraped: str) -> list[str]:
     """Ask Claude for 4 clarifying questions based on scraped company info."""
-    from anthropic import AsyncAnthropic
-
-    client = AsyncAnthropic(api_key=_require_key())
+    client = _client()
     msg = await client.messages.create(
         model=settings.anthropic_model_fast,
         max_tokens=500,

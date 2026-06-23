@@ -1,0 +1,56 @@
+# Render Blueprint — MOATION (darmowy hosting)
+#
+# Baza Postgres NIE jest tutaj definiowana celowo: darmowy Postgres na Render
+# kasuje się po ~30 dniach. Zamiast tego użyj darmowego Postgresa na Neon
+# (https://neon.tech) i wklej jego connection string do zmiennej DATABASE_URL
+# usługi `moation-api`. Reszta (API + frontend) stoi za darmo na Render.
+#
+# Jak wdrożyć:
+#   1. Załóż darmową bazę na Neon, skopiuj "connection string".
+#   2. Na Render: New → Blueprint → podłącz to repo (branch z tą zmianą).
+#   3. Render zapyta o sekrety oznaczone `sync: false`:
+#        - DATABASE_URL      → wklej URL z Neona
+#        - ANTHROPIC_API_KEY → klucz Anthropic (opcjonalny; puste = bez AI)
+#   4. Deploy. Frontend sam podepnie się pod API (NEXT_PUBLIC_API_URL).
+#
+# Uwaga: darmowe usługi usypiają po 15 min bezczynności (zimny start ~1 min).
+
+services:
+  - type: web
+    name: moation-api
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /api/v1/health
+    # Migracje + serwer. Render dostarcza $PORT.
+    dockerCommand: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: DATABASE_URL
+        sync: false # wklej connection string z Neon (postgresql://...)
+      - key: ANTHROPIC_API_KEY
+        sync: false # opcjonalnie — dla ICP / kanałów web_search
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ALLOW_ALL
+        value: "true"
+      - key: ENVIRONMENT
+        value: production
+
+  - type: web
+    name: moation-web
+    runtime: node
+    rootDir: frontend
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      # Automatyczne podpięcie URL-a API (frontend dokłada https://).
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: moation-api
+          property: host
