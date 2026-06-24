@@ -24,8 +24,8 @@ services:
     dockerContext: .
     plan: free
     healthCheckPath: /api/v1/health
-    # Migracje + serwer. Render dostarcza $PORT.
-    dockerCommand: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    # Migracje + start serwera są w CMD Dockerfile (Render nie owija polecenia
+    # w shell, więc trzymamy to po stronie obrazu). $PORT wstrzykuje Render.
     envVars:
       - key: DATABASE_URL
         sync: false # wklej connection string z Neon (postgresql://...)

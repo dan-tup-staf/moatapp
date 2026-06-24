@@ -39,6 +39,11 @@ def build_async_db_args() -> tuple[str, dict[str, Any]]:
     if wants_ssl:
         connect_args["ssl"] = True
 
+    # Disable asyncpg's prepared-statement cache: harmless on direct Postgres,
+    # but required when connecting through a transaction pooler (Neon's
+    # `-pooler` endpoint / PgBouncer) which otherwise breaks prepared statements.
+    connect_args["statement_cache_size"] = 0
+
     url = url.set(query=query)
     return url.render_as_string(hide_password=False), connect_args
 
