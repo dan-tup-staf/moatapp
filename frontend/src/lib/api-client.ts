@@ -2,7 +2,11 @@ import { tokenStorage } from "@/lib/auth";
 
 // Render's `fromService` injects a bare hostname (no scheme); prepend https
 // so the blueprint can wire the API URL automatically without manual editing.
-const RAW_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Also strip any trailing slash(es): a value like "https://api.example.com/"
+// would otherwise produce "https://api.example.com//api/v1/..." and 404.
+const RAW_API_URL = (
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+).replace(/\/+$/, "");
 const API_URL = /^https?:\/\//.test(RAW_API_URL)
   ? RAW_API_URL
   : `https://${RAW_API_URL}`;
