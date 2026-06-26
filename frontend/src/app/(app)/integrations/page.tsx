@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+import { api, ApiError, EmailStatus } from "@/lib/api-client";
 
 type Integration = {
   id: string;
@@ -125,9 +127,11 @@ export default function IntegrationsPage() {
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Integracje</h2>
         <p className="mt-1 text-sm text-gray-600">
-          Zewnętrzne systemy które będą podłączone do MOATION
+          Zewnętrzne systemy podłączone do MOATION
         </p>
       </div>
+
+      <MailboxCard />
 
       <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
         <p className="font-medium">🚧 Roadmap — jeszcze niezaimplementowane</p>
@@ -149,6 +153,125 @@ export default function IntegrationsPage() {
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+function MailboxCard() {
+  const [status, setStatus] = useState<EmailStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [testing, setTesting] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setStatus(await api.email.status());
+      } catch {
+        setStatus(null);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  async function sendTest() {
+    setTesting(true);
+    setMsg(null);
+    try {
+      const res = await api.email.test();
+      setMsg({
+        ok: true,
+        text: `Wysłano test na ${res.sent_to}. Sprawdź skrzynkę (także spam).`,
+      });
+    } catch (err) {
+      setMsg({
+        ok: false,
+        text: err instanceof ApiError ? err.detail : "Błąd wysyłki",
+      });
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  const configured = status?.configured ?? false;
+  const security = status?.use_tls
+    ? "TLS (465)"
+    : status?.starttls
+      ? "STARTTLS (587)"
+      : "brak";
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-gray-900">
+              Skrzynka wysyłkowa (SMTP)
+            </span>
+            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">
+              Email
+            </span>
+            {!loading && (
+              <span
+                className={
+                  "rounded-full px-2 py-0.5 text-xs " +
+                  (configured
+                    ? "bg-emerald-100 text-emerald-800"
+                    : "bg-amber-100 text-amber-800")
+                }
+              >
+                {configured ? "Podłączona" : "Nie skonfigurowana"}
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-sm text-gray-600">
+            Skrzynka, z której wychodzą kampanie. Konfiguracja przez zmienne
+            środowiskowe usługi{" "}
+            <code className="rounded bg-gray-100 px-1">moation-api</code> na
+            Render (SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD…).
+          </p>
+          {!loading && status && (
+            <p className="mt-2 text-xs text-gray-500">
+              Host:{" "}
+              <span className="font-mono">
+                {status.host}:{status.port}
+              </span>{" "}
+              · Szyfrowanie: {security} · Nadawca:{" "}
+              <span className="font-mono">
+                {status.from_email || "(domyślny z kampanii)"}
+              </span>{" "}
+              · Limit/dzień: {status.daily_limit || "∞"}
+            </p>
+          )}
+        </div>
+        <button
+          onClick={sendTest}
+          disabled={testing}
+          className="shrink-0 rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+        >
+          {testing ? "Wysyłam…" : "Wyślij testowy mail"}
+        </button>
+      </div>
+
+      {!loading && !configured && (
+        <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          Brak loginu/hasła SMTP — wysyłka trafia do dev-skrzynki i nie dotrze do
+          prawdziwych adresów. Ustaw SMTP_USERNAME i SMTP_PASSWORD na moation-api.
+        </p>
+      )}
+      {msg && (
+        <p
+          className={
+            "mt-3 rounded-md px-3 py-2 text-sm " +
+            (msg.ok
+              ? "bg-emerald-50 text-emerald-800"
+              : "bg-red-50 text-red-700")
+          }
+        >
+          {msg.text}
+        </p>
+      )}
     </div>
   );
 }

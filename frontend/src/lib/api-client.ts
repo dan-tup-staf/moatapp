@@ -25,6 +25,23 @@ export type Token = {
   token_type: string;
 };
 
+export type EmailStatus = {
+  configured: boolean;
+  host: string;
+  port: number;
+  from_email: string;
+  from_name: string;
+  starttls: boolean;
+  use_tls: boolean;
+  daily_limit: number;
+};
+
+export type TestEmailResult = {
+  ok: boolean;
+  sent_to: string;
+  detail: string | null;
+};
+
 export type LeadList = {
   id: number;
   name: string;
@@ -508,6 +525,16 @@ export const api = {
     }),
 
   me: () => authed<UserRead>("/auth/me"),
+
+  // Email (sending mailbox)
+  email: {
+    status: () => authed<EmailStatus>("/email/status"),
+    test: (to?: string) =>
+      authed<TestEmailResult>("/email/test", {
+        method: "POST",
+        body: JSON.stringify({ to: to ?? null }),
+      }),
+  },
 
   // Lists
   lists: {

@@ -5,6 +5,7 @@ from app.api.v1 import (
     campaigns,
     crm,
     dashboard,
+    email,
     health,
     icp,
     leads,
@@ -24,3 +25,4 @@ api_router.include_router(signals.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(crm.router)
 api_router.include_router(icp.router)
+api_router.include_router(email.router)

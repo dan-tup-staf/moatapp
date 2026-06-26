@@ -76,6 +76,28 @@ oraz reguły progów.
 4. Krok tieringu (§4).
 5. Krok integracji z CRM (do ustalenia: jaki CRM).
 
+## Roadmapa Email (wysyłka kampanii)
+
+- **Milestone 1 — realna wysyłka z podłączonej skrzynki (ZROBIONE).**
+  - SMTP z autoryzacją + TLS (STARTTLS/implicit), poprawny From = adres
+    uwierzytelnionej skrzynki, nagłówek `List-Unsubscribe`.
+  - Dzienny limit bezpieczeństwa (`SMTP_DAILY_LIMIT`, domyślnie 50).
+  - Konfiguracja przez env na `moation-api` (SMTP_HOST/PORT/USERNAME/PASSWORD/
+    STARTTLS/USE_TLS/FROM_EMAIL/FROM_NAME).
+  - UI: karta „Skrzynka wysyłkowa (SMTP)" w Integracjach + przycisk „Wyślij
+    testowy mail" (`GET /email/status`, `POST /email/test`).
+  - ⚠️ Wysyłka leci przez ręczny przycisk „Wyślij należne teraz" — automatyczny
+    harmonogram (worker arq + Redis) NIE jest wdrożony na darmowym Renderze.
+- **Milestone 1.5 — automatyczny harmonogram:** worker + Redis na Render
+  (lub lekki cron w API), żeby sekwencje słały się same.
+- **Milestone 2 — deliverability:** prawdziwy unsubscribe (token + strona),
+  per-skrzynkowe limity i pauzy, SPF/DKIM/DMARC (poradnik), bounce handling.
+- **Milestone 3 — wiele skrzynek + rozgrzewanie:** podłączanie wielu skrzynek
+  (OAuth/SMTP), rotacja, ramp wysyłek; rozgrzewanie najpierw przez gotowe API
+  (Mailreach/Instantly) zamiast własnej sieci peer-to-peer.
+- **Milestone 4 (opcjonalnie) — auto-zakładanie skrzynek/domen:** Google
+  Workspace/Microsoft + rejestrator DNS; wymaga stałych kosztów.
+
 ## Otwarte pytania do ustalenia później
 - Z jakim CRM integrujemy w pierwszej kolejności?
 - Progi tieringu: automatyczne (po score) czy ręcznie definiowane przez usera?

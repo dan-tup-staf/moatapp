@@ -9,8 +9,22 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://moatapp:moatapp@postgres:5432/moatapp"
     redis_url: str = "redis://redis:6379/0"
 
+    # SMTP sending mailbox. Defaults target Mailhog (dev). For real delivery,
+    # set host/port + credentials of your provider (e.g. Gmail/Workspace:
+    # smtp.gmail.com:587 starttls with an App Password, or Resend/Postmark/SES).
     smtp_host: str = "mailhog"
     smtp_port: int = 1025
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_starttls: bool = False  # True for port 587 (Gmail/Workspace)
+    smtp_use_tls: bool = False  # True for port 465 (implicit TLS)
+    # Address mail is actually sent from. When set, overrides per-campaign
+    # from_email so the From matches the authenticated mailbox (deliverability).
+    smtp_from_email: str = ""
+    smtp_from_name: str = ""
+    # Safety cap on outbound emails per day across the instance (deliverability
+    # / cold-start protection). 0 = unlimited.
+    smtp_daily_limit: int = 50
 
     jwt_secret: str = "change-me-in-prod"
     jwt_algorithm: str = "HS256"

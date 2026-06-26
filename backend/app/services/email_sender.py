@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
 import aiosmtplib
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -29,6 +29,11 @@ from app.services.campaigns import render_template
 logger = logging.getLogger(__name__)
 
 
+def smtp_configured() -> bool:
+    """True when a real (non-Mailhog) sending mailbox looks configured."""
+    return bool(settings.smtp_username and settings.smtp_password)
+
+
 async def _send_via_smtp(
     *,
     to_email: str,
@@ -37,16 +42,43 @@ async def _send_via_smtp(
     subject: str,
     body: str,
 ) -> None:
+    # Prefer the authenticated mailbox address as the From — many providers
+    # reject a From that doesn't match the logged-in account.
+    actual_from = settings.smtp_from_email or from_email
+    actual_name = from_name or settings.smtp_from_name or None
+
     msg = EmailMessage()
-    msg["From"] = f"{from_name} <{from_email}>" if from_name else from_email
+    msg["From"] = f"{actual_name} <{actual_from}>" if actual_name else actual_from
     msg["To"] = to_email
     msg["Subject"] = subject
+    # Lightweight unsubscribe header (improves deliverability). Token-based
+    # one-click handling is a later milestone.
+    msg["List-Unsubscribe"] = f"<mailto:{actual_from}?subject=unsubscribe>"
     msg.set_content(body)
 
     await aiosmtplib.send(
         msg,
         hostname=settings.smtp_host,
         port=settings.smtp_port,
+        username=settings.smtp_username or None,
+        password=settings.smtp_password or None,
+        use_tls=settings.smtp_use_tls,
+        start_tls=settings.smtp_starttls or None,
+    )
+
+
+async def send_test_email(to_email: str) -> None:
+    """Send a one-off test message via the configured SMTP. Raises on failure."""
+    await _send_via_smtp(
+        to_email=to_email,
+        from_email=settings.smtp_from_email or "no-reply@moation.local",
+        from_name=settings.smtp_from_name or "MOATION",
+        subject="MOATION — test wysyłki ✅",
+        body=(
+            "To jest testowa wiadomość z MOATION.\n\n"
+            "Jeśli ją widzisz, Twoja skrzynka wysyłkowa jest poprawnie "
+            "skonfigurowana i możesz wysyłać kampanie.\n"
+        ),
     )
 
 
@@ -167,6 +199,33 @@ async def process_due_enrollments(campaign_id: int | None = None) -> int:
             stmt = stmt.where(CampaignEnrollment.campaign_id == campaign_id)
         result = await db.execute(stmt)
         enrollment_ids = [row[0] for row in result.all()]
+
+        # Daily safety cap on outbound email (deliverability / cold-start).
+        limit = settings.smtp_daily_limit
+        if limit and limit > 0 and enrollment_ids:
+            day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            sent_today = int(
+                (
+                    await db.execute(
+                        select(func.count())
+                        .select_from(Message)
+                        .where(
+                            Message.status == "sent",
+                            Message.sent_at.isnot(None),
+                            Message.sent_at >= day_start,
+                        )
+                    )
+                ).scalar()
+                or 0
+            )
+            remaining = limit - sent_today
+            if remaining <= 0:
+                logger.warning(
+                    "Dzienny limit maili (%d) osiągnięty — wstrzymuję wysyłkę",
+                    limit,
+                )
+                return 0
+            enrollment_ids = enrollment_ids[:remaining]
 
     processed = 0
     for eid in enrollment_ids:

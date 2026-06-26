@@ -35,6 +35,25 @@ services:
         sync: false # DARMOWY (aistudio.google.com) — zasila ICP + web_search
       - key: ANTHROPIC_API_KEY
         sync: false # płatna alternatywa; puste, jeśli używasz Gemini
+      # --- Wysyłka maili (Milestone 1) — skrzynka SMTP ---
+      - key: SMTP_HOST
+        sync: false # np. smtp.gmail.com
+      - key: SMTP_PORT
+        sync: false # 587 (starttls) lub 465 (tls)
+      - key: SMTP_USERNAME
+        sync: false # login skrzynki
+      - key: SMTP_PASSWORD
+        sync: false # hasło / App Password
+      - key: SMTP_STARTTLS
+        sync: false # "true" dla portu 587 (Gmail/Workspace)
+      - key: SMTP_USE_TLS
+        sync: false # "true" dla portu 465
+      - key: SMTP_FROM_EMAIL
+        sync: false # adres nadawcy (zwykle = login)
+      - key: SMTP_FROM_NAME
+        sync: false # nazwa nadawcy (np. Daniel z Staffly)
+      - key: SMTP_DAILY_LIMIT
+        value: "50" # dzienny limit bezpieczeństwa (0 = bez limitu)
       - key: JWT_SECRET
         generateValue: true
       - key: CORS_ALLOW_ALL
