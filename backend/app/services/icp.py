@@ -89,7 +89,7 @@ async def generate_questions(scraped: str) -> list[str]:
         "Zwróć tylko JSON array 4 stringów, bez żadnych dodatków.\n\n"
         f"OPIS FIRMY:\n{scraped[:3000]}"
     )
-    text = await llm.generate_text(prompt, max_tokens=500)
+    text = await llm.generate_text(prompt, max_tokens=500, json_mode=True)
     return _parse_json_list(text, "pytania")
 
 
@@ -117,17 +117,29 @@ async def synthesize_icp(
         f"OPIS FIRMY:\n{scraped[:3000]}\n\n"
         f"PYTANIA I ODPOWIEDZI:\n{qa_block or '(brak)'}"
     )
-    text = await llm.generate_text(prompt, max_tokens=1500, quality=True)
+    text = await llm.generate_text(
+        prompt, max_tokens=1500, quality=True, json_mode=True
+    )
     return _parse_json_dict(text, "ICP")
 
 
 _JSON_BLOCK_RE = re.compile(r"```(?:json)?\s*(.+?)\s*```", re.DOTALL)
+_JSON_SPAN_RE = re.compile(r"(\[.*\]|\{.*\})", re.DOTALL)
 
 
 def _unwrap_json(text: str) -> str:
-    """Claude sometimes wraps JSON in ```json ... ``` even when asked not to."""
+    """Best-effort extraction of a JSON payload from model output: models
+    sometimes wrap JSON in ```json ... ``` fences or add a prose preamble even
+    when asked not to. Strip fences, otherwise grab the first [...] / {...}
+    span so json.loads has a clean candidate."""
     m = _JSON_BLOCK_RE.search(text)
-    return m.group(1) if m else text.strip()
+    if m:
+        return m.group(1).strip()
+    stripped = text.strip()
+    if stripped[:1] in "[{":
+        return stripped
+    span = _JSON_SPAN_RE.search(stripped)
+    return span.group(1) if span else stripped
 
 
 def _parse_json_list(text: str, what: str) -> list[str]:
@@ -138,7 +150,7 @@ def _parse_json_list(text: str, what: str) -> list[str]:
         return [str(x).strip() for x in data if str(x).strip()]
     except (json.JSONDecodeError, ValueError) as e:
         logger.exception("Claude zwrócił niepoprawny JSON dla %s: %s", what, text)
-        raise RuntimeError(f"Claude zwrócił niepoprawny format dla {what}") from e
+        raise RuntimeError(f"AI zwrócił niepoprawny format dla {what}") from e
 
 
 def _parse_json_dict(text: str, what: str) -> dict:
@@ -149,7 +161,7 @@ def _parse_json_dict(text: str, what: str) -> dict:
         return data
     except (json.JSONDecodeError, ValueError) as e:
         logger.exception("Claude zwrócił niepoprawny JSON dla %s: %s", what, text)
-        raise RuntimeError(f"Claude zwrócił niepoprawny format dla {what}") from e
+        raise RuntimeError(f"AI zwrócił niepoprawny format dla {what}") from e
 
 
 # ---------- Discovery: suggest dedicated signal sources from ICP ----------
@@ -227,7 +239,9 @@ async def suggest_signal_sources(icp: IcpProfile) -> list[dict]:
         f"OPIS FIRMY UŻYTKOWNIKA:\n{summary}"
     )
     try:
-        text = await llm.generate_text(prompt, max_tokens=2000, quality=True)
+        text = await llm.generate_text(
+            prompt, max_tokens=2000, quality=True, json_mode=True
+        )
     except AnthropicNotConfigured:
         raise
     except Exception as e:
@@ -267,9 +281,9 @@ def _parse_json_list_of_dicts(text: str) -> list[dict]:
         data = json.loads(_unwrap_json(text))
     except json.JSONDecodeError as e:
         logger.exception("suggest_signal_sources: niepoprawny JSON: %s", text[:300])
-        raise RuntimeError("Claude zwrócił niepoprawny format propozycji") from e
+        raise RuntimeError("AI zwrócił niepoprawny format propozycji") from e
     if not isinstance(data, list):
-        raise RuntimeError("Claude zwrócił niepoprawny format propozycji")
+        raise RuntimeError("AI zwrócił niepoprawny format propozycji")
     return [x for x in data if isinstance(x, dict)]
 
 

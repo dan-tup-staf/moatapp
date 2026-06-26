@@ -62,16 +62,25 @@ async def web_search_text(prompt: str, *, max_tokens: int = 2500) -> str:
 
 
 async def generate_text(
-    prompt: str, *, max_tokens: int = 1000, quality: bool = False
+    prompt: str,
+    *,
+    max_tokens: int = 1000,
+    quality: bool = False,
+    json_mode: bool = False,
 ) -> str:
     """Run a plain generation (no web search) and return the text output.
 
     `quality=True` selects the stronger model where the provider distinguishes
     (Anthropic quality vs fast); Gemini uses a single configured model.
+    `json_mode=True` asks the provider to return strict JSON (Gemini honours
+    this via responseMimeType; Anthropic relies on the prompt + tolerant
+    parsing on the caller side).
     """
     p = provider()
     if p == "gemini":
-        return await _gemini(prompt, max_tokens=max_tokens, search=False)
+        return await _gemini(
+            prompt, max_tokens=max_tokens, search=False, json_mode=json_mode
+        )
     if p == "anthropic":
         return await _anthropic(prompt, max_tokens=max_tokens, search=False, quality=quality)
     raise LlmNotConfigured(_NOT_CONFIGURED_MSG)
@@ -80,15 +89,26 @@ async def generate_text(
 # ---------- Gemini (REST via httpx) ----------
 
 
-async def _gemini(prompt: str, *, max_tokens: int, search: bool) -> str:
+async def _gemini(
+    prompt: str, *, max_tokens: int, search: bool, json_mode: bool = False
+) -> str:
+    gen_config: dict[str, Any] = {
+        "maxOutputTokens": max_tokens,
+        "temperature": 0.2,
+    }
     body: dict[str, Any] = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.2},
+        "generationConfig": gen_config,
     }
     if search:
         # Native Google Search grounding (Gemini 2.x) — the equivalent of
-        # Anthropic's server-side web_search tool.
+        # Anthropic's server-side web_search tool. (Cannot combine with the
+        # JSON response mime type, so json_mode is ignored when searching.)
         body["tools"] = [{"google_search": {}}]
+    elif json_mode:
+        # Force strict JSON output — avoids markdown fences / prose wrappers
+        # that break downstream json.loads.
+        gen_config["responseMimeType"] = "application/json"
 
     url = _GEMINI_ENDPOINT.format(model=settings.gemini_model)
     try:
