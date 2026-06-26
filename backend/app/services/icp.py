@@ -21,115 +21,75 @@ import re
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
+from app import llm
 from app.models.icp_profile import IcpProfile
 from app.schemas.icp import IcpFieldsUpdate, QAPair
 
 logger = logging.getLogger(__name__)
 
-
-class AnthropicNotConfigured(RuntimeError):
-    pass
-
-
-def _require_key() -> str:
-    if not settings.anthropic_api_key:
-        raise AnthropicNotConfigured(
-            "ANTHROPIC_API_KEY not set — configure in .env to use ICP features"
-        )
-    return settings.anthropic_api_key
+# Kept as an alias for backward compatibility: the route layer catches
+# `AnthropicNotConfigured`. The provider-agnostic layer raises LlmNotConfigured
+# (covers both Gemini and Anthropic), so aliasing keeps existing `except`
+# clauses working without change.
+AnthropicNotConfigured = llm.LlmNotConfigured
 
 
-def _client():
-    """Build an AsyncAnthropic client, honouring an optional base_url override."""
-    from anthropic import AsyncAnthropic
-
-    kwargs = {"api_key": _require_key()}
-    if settings.anthropic_base_url:
-        kwargs["base_url"] = settings.anthropic_base_url
-    return AsyncAnthropic(**kwargs)
-
-
-# ---------- Company research (LLM + web_search) ----------
+# ---------- Company research (LLM + web search) ----------
 
 
 async def research_company_with_llm(url: str) -> str:
-    """Research a company by URL using Claude + server-side web_search tool.
-    Replaces the legacy httpx scraping path — works around Cloudflare bot
-    protection because searches happen on Anthropic's infrastructure.
+    """Research a company by URL using the configured AI provider with web
+    search (Gemini Google Search grounding, or Anthropic web_search). Works
+    around Cloudflare bot protection because searches run provider-side.
 
     Returns 200-300 word Polish summary ready for question generation."""
-    client = _client()
+    prompt = (
+        f"Zbadaj firmę pod tym URL: {url}\n\n"
+        "Wyszukaj w internecie (strona, LinkedIn, news, "
+        "katalogi firm) i zwróć 200-300 słów po polsku w "
+        "strukturze:\n"
+        "- Co firma robi (produkt/usługa)\n"
+        "- Branża i target market\n"
+        "- Wielkość firmy jeśli możliwa do ustalenia\n"
+        "- Kluczowe oferty / flagowe produkty\n"
+        "- Typowi klienci / buyer persona\n\n"
+        "Konkretnie, bez marketingowych ozdobników. Jeśli nie "
+        "znajdziesz jakiejś informacji — napisz wprost czego "
+        "brakuje, nie zmyślaj."
+    )
     try:
-        response = await client.messages.create(
-            model=settings.anthropic_model_fast,
-            max_tokens=1500,
-            tools=[{"type": "web_search_20260209", "name": "web_search"}],
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        f"Zbadaj firmę pod tym URL: {url}\n\n"
-                        "Wyszukaj w internecie (strona, LinkedIn, news, "
-                        "katalogi firm) i zwróć 200-300 słów po polsku w "
-                        "strukturze:\n"
-                        "- Co firma robi (produkt/usługa)\n"
-                        "- Branża i target market\n"
-                        "- Wielkość firmy jeśli możliwa do ustalenia\n"
-                        "- Kluczowe oferty / flagowe produkty\n"
-                        "- Typowi klienci / buyer persona\n\n"
-                        "Konkretnie, bez marketingowych ozdobników. Jeśli nie "
-                        "znajdziesz jakiejś informacji — napisz wprost czego "
-                        "brakuje, nie zmyślaj."
-                    ),
-                }
-            ],
-        )
+        text = await llm.web_search_text(prompt, max_tokens=1500)
+    except llm.LlmNotConfigured:
+        raise
     except Exception as e:
-        logger.exception("Claude research failed for %s", url)
+        logger.exception("Company research failed for %s", url)
         raise RuntimeError(
-            f"Claude research nie powiodł się: {type(e).__name__}: {e}"
+            f"Research firmy nie powiódł się: {type(e).__name__}: {e}"
         ) from e
 
-    # Response ma interleaved blocks:
-    # [text (opt. "Będę szukać..."), server_tool_use, web_search_tool_result, text (synthesis)]
-    # Zbieramy wszystkie text blocks; final synthesis jest ostatni.
-    texts = [
-        b.text.strip() for b in response.content if b.type == "text" and b.text.strip()
-    ]
-    if not texts:
+    if not text.strip():
         raise RuntimeError(
-            "Claude nie zwrócił tekstu — prawdopodobnie web_search nie "
-            "znalazł nic o tej firmie. Uzyj opcji Opis reczny."
+            "AI nie zwrócił tekstu — prawdopodobnie wyszukiwarka nie "
+            "znalazła nic o tej firmie. Użyj opcji Opis ręczny."
         )
-    return "\n\n".join(texts)
+    return text
 
 
-# ---------- Claude calls ----------
+# ---------- LLM calls ----------
 
 
 async def generate_questions(scraped: str) -> list[str]:
-    """Ask Claude for 4 clarifying questions based on scraped company info."""
-    client = _client()
-    msg = await client.messages.create(
-        model=settings.anthropic_model_fast,
-        max_tokens=500,
-        messages=[
-            {
-                "role": "user",
-                "content": (
-                    "Jesteś doradcą GTM. Na podstawie poniższego opisu firmy "
-                    "wygeneruj 4 precyzyjne pytania, które pomogą określić "
-                    "Ideal Customer Profile (ICP) tej firmy. Każde pytanie "
-                    "maksymalnie 1 zdanie, konkretne (branża / wielkość klienta / "
-                    "rola buyer persona / trigger zakupowy).\n\n"
-                    "Zwróć tylko JSON array 4 stringów, bez żadnych dodatków.\n\n"
-                    f"OPIS FIRMY:\n{scraped[:3000]}"
-                ),
-            }
-        ],
+    """Ask the AI for 4 clarifying questions based on scraped company info."""
+    prompt = (
+        "Jesteś doradcą GTM. Na podstawie poniższego opisu firmy "
+        "wygeneruj 4 precyzyjne pytania, które pomogą określić "
+        "Ideal Customer Profile (ICP) tej firmy. Każde pytanie "
+        "maksymalnie 1 zdanie, konkretne (branża / wielkość klienta / "
+        "rola buyer persona / trigger zakupowy).\n\n"
+        "Zwróć tylko JSON array 4 stringów, bez żadnych dodatków.\n\n"
+        f"OPIS FIRMY:\n{scraped[:3000]}"
     )
-    text = _extract_text(msg)
+    text = await llm.generate_text(prompt, max_tokens=500)
     return _parse_json_list(text, "pytania")
 
 
@@ -137,47 +97,28 @@ async def synthesize_icp(
     scraped: str, qa: list[QAPair]
 ) -> dict:
     """Synthesize structured ICP from scraped text + Q&A history."""
-    from anthropic import AsyncAnthropic
-
     qa_block = "\n".join(
         f"Q: {p.question}\nA: {p.answer}" for p in qa if p.answer.strip()
     )
-    client = AsyncAnthropic(api_key=_require_key())
-    msg = await client.messages.create(
-        model=settings.anthropic_model_quality,
-        max_tokens=1500,
-        messages=[
-            {
-                "role": "user",
-                "content": (
-                    "Na podstawie opisu firmy i odpowiedzi founderów stwórz "
-                    "Ideal Customer Profile (ICP). Zwróć TYLKO poprawny JSON "
-                    "ze schematem:\n"
-                    "{\n"
-                    '  "target_industries": [string, string, ...],\n'
-                    '  "company_size": string (np. "50-500 pracowników"),\n'
-                    '  "buyer_persona_titles": [string, string, ...],\n'
-                    '  "pain_points": [string, string, ...],\n'
-                    '  "triggers": [string, string, ...] (sygnały kupowe, np. '
-                    '"rekrutacja HR managera"),\n'
-                    '  "notes": string (krótkie dodatkowe wskazówki)\n'
-                    "}\n\n"
-                    "Każda lista 3-6 elementów, konkretne, bez ogólników.\n\n"
-                    f"OPIS FIRMY:\n{scraped[:3000]}\n\n"
-                    f"PYTANIA I ODPOWIEDZI:\n{qa_block or '(brak)'}"
-                ),
-            }
-        ],
+    prompt = (
+        "Na podstawie opisu firmy i odpowiedzi founderów stwórz "
+        "Ideal Customer Profile (ICP). Zwróć TYLKO poprawny JSON "
+        "ze schematem:\n"
+        "{\n"
+        '  "target_industries": [string, string, ...],\n'
+        '  "company_size": string (np. "50-500 pracowników"),\n'
+        '  "buyer_persona_titles": [string, string, ...],\n'
+        '  "pain_points": [string, string, ...],\n'
+        '  "triggers": [string, string, ...] (sygnały kupowe, np. '
+        '"rekrutacja HR managera"),\n'
+        '  "notes": string (krótkie dodatkowe wskazówki)\n'
+        "}\n\n"
+        "Każda lista 3-6 elementów, konkretne, bez ogólników.\n\n"
+        f"OPIS FIRMY:\n{scraped[:3000]}\n\n"
+        f"PYTANIA I ODPOWIEDZI:\n{qa_block or '(brak)'}"
     )
-    text = _extract_text(msg)
+    text = await llm.generate_text(prompt, max_tokens=1500, quality=True)
     return _parse_json_dict(text, "ICP")
-
-
-def _extract_text(msg) -> str:
-    for block in msg.content:
-        if hasattr(block, "text"):
-            return block.text
-    return ""
 
 
 _JSON_BLOCK_RE = re.compile(r"```(?:json)?\s*(.+?)\s*```", re.DOTALL)
@@ -247,57 +188,46 @@ KONTEKST — polski ekosystem sygnałów zakupowych B2B (używaj go w zapytaniac
 
 
 async def suggest_signal_sources(icp: IcpProfile) -> list[dict]:
-    """Given a synthesized ICP, ask Claude to propose dedicated signal sources
+    """Given a synthesized ICP, ask the AI to propose dedicated signal sources
     (one per relevant channel) with tailored Polish-context search queries.
 
     Returns a list of dicts: {type, name, query, rationale, score_weight,
     max_results}. Only web_search channels are produced so each maps directly
     to a SignalSourceCreate with config {query, max_results}."""
-    from anthropic import AsyncAnthropic
-
     fields = icp.icp_fields or {}
     icp_block = json.dumps(fields, ensure_ascii=False, indent=2)
     summary = (icp.scraped_summary or "")[:2000]
 
-    client = AsyncAnthropic(api_key=_require_key())
+    prompt = (
+        "Jesteś strategiem intent-data dla polskiego B2B. Na "
+        "podstawie ICP użytkownika zaproponuj 6-9 DEDYKOWANYCH "
+        "źródeł sygnałów zakupowych — po jednym precyzyjnym "
+        "zapytaniu na źródło.\n\n"
+        f"{_PL_SIGNAL_CONTEXT}\n"
+        "Dozwolone wartości pola 'type' (kanał wyszukiwania):\n"
+        "- linkedin: zmiany stanowisk, role C-suite, rekrutacja GTM\n"
+        "- google_news: prasa, komunikaty, ESPI/EBI, regulacje\n"
+        "- serp: rejestry (KRS/RDF/MSiG/Zastawy), BIP, granty, patenty\n"
+        "- funding: rundy VC/PE, NCBR/PARP, M&A\n"
+        "- x_twitter: zapowiedzi i dyskusje branżowe\n"
+        "- company_site: monitoring stron firm z targetu\n\n"
+        "Zwróć WYŁĄCZNIE poprawny JSON array obiektów:\n"
+        "[{\n"
+        '  "type": string (jeden z dozwolonych),\n'
+        '  "name": string (krótka nazwa źródła po polsku),\n'
+        '  "query": string (gotowe zapytanie wyszukiwania, '
+        "konkretne — branże/role/triggery z ICP),\n"
+        '  "rationale": string (1 zdanie: dlaczego to sygnał '
+        "zakupowy dla tego ICP),\n"
+        '  "score_weight": int 10-50 (siła sygnału)\n'
+        "}]\n\n"
+        "Bez markdown, sam JSON. Dobierz kanały do ICP — nie "
+        "wrzucaj wszystkiego na siłę.\n\n"
+        f"ICP (pola):\n{icp_block}\n\n"
+        f"OPIS FIRMY UŻYTKOWNIKA:\n{summary}"
+    )
     try:
-        msg = await client.messages.create(
-            model=settings.anthropic_model_quality,
-            max_tokens=2000,
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        "Jesteś strategiem intent-data dla polskiego B2B. Na "
-                        "podstawie ICP użytkownika zaproponuj 6-9 DEDYKOWANYCH "
-                        "źródeł sygnałów zakupowych — po jednym precyzyjnym "
-                        "zapytaniu na źródło.\n\n"
-                        f"{_PL_SIGNAL_CONTEXT}\n"
-                        "Dozwolone wartości pola 'type' (kanał wyszukiwania):\n"
-                        "- linkedin: zmiany stanowisk, role C-suite, rekrutacja GTM\n"
-                        "- google_news: prasa, komunikaty, ESPI/EBI, regulacje\n"
-                        "- serp: rejestry (KRS/RDF/MSiG/Zastawy), BIP, granty, patenty\n"
-                        "- funding: rundy VC/PE, NCBR/PARP, M&A\n"
-                        "- x_twitter: zapowiedzi i dyskusje branżowe\n"
-                        "- company_site: monitoring stron firm z targetu\n\n"
-                        "Zwróć WYŁĄCZNIE poprawny JSON array obiektów:\n"
-                        "[{\n"
-                        '  "type": string (jeden z dozwolonych),\n'
-                        '  "name": string (krótka nazwa źródła po polsku),\n'
-                        '  "query": string (gotowe zapytanie wyszukiwania, '
-                        "konkretne — branże/role/triggery z ICP),\n"
-                        '  "rationale": string (1 zdanie: dlaczego to sygnał '
-                        "zakupowy dla tego ICP),\n"
-                        '  "score_weight": int 10-50 (siła sygnału)\n'
-                        "}]\n\n"
-                        "Bez markdown, sam JSON. Dobierz kanały do ICP — nie "
-                        "wrzucaj wszystkiego na siłę.\n\n"
-                        f"ICP (pola):\n{icp_block}\n\n"
-                        f"OPIS FIRMY UŻYTKOWNIKA:\n{summary}"
-                    ),
-                }
-            ],
-        )
+        text = await llm.generate_text(prompt, max_tokens=2000, quality=True)
     except AnthropicNotConfigured:
         raise
     except Exception as e:
@@ -306,7 +236,6 @@ async def suggest_signal_sources(icp: IcpProfile) -> list[dict]:
             f"Generowanie propozycji nie powiodło się: {type(e).__name__}: {e}"
         ) from e
 
-    text = _extract_text(msg)
     raw = _parse_json_list_of_dicts(text)
 
     out: list[dict] = []

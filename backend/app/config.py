@@ -22,8 +22,16 @@ class Settings(BaseSettings):
     # credentialed CORS when this is on. Keep False in real production.
     cors_allow_all: bool = False
 
-    # Anthropic API — needed only for ICP / web_search signal channels;
-    # empty = those features disabled (rest of app works).
+    # AI provider for ICP + web_search signal channels. First configured wins;
+    # Gemini is preferred when both are set (it's free). Empty for both = those
+    # features disabled (rest of app works).
+    #
+    # Google Gemini — free tier with native Google Search grounding (the cheap
+    # default). Get a key at https://aistudio.google.com.
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
+
+    # Anthropic API — paid alternative; uses the server-side web_search tool.
     anthropic_api_key: str = ""
     # Optional override (e.g. an Anthropic-compatible gateway). Empty = official API.
     anthropic_base_url: str = ""

@@ -16,8 +16,9 @@ config schema (per source):
                                      search to that domain
     max_results:    int (optional, default 15)
 
-Requires ANTHROPIC_API_KEY. If missing, `fetch` raises RuntimeError which
-`services.signals.run_source` captures into `source.last_error`.
+Requires an AI provider (GEMINI_API_KEY or ANTHROPIC_API_KEY). If missing,
+`fetch` raises RuntimeError which `services.signals.run_source` captures into
+`source.last_error`. Provider selection lives in `app.llm`.
 """
 
 import json
@@ -25,7 +26,7 @@ import logging
 import re
 from typing import Any
 
-from app.config import settings
+from app import llm
 from app.scrapers.base import BaseScraper, ScrapedSignal
 
 logger = logging.getLogger(__name__)
@@ -97,10 +98,10 @@ class WebSearchScraper(BaseScraper):
         query = (config.get("query") or "").strip()
         if not query:
             return []
-        if not settings.anthropic_api_key:
+        if not llm.is_configured():
             raise RuntimeError(
-                "ANTHROPIC_API_KEY nie ustawiony — kanały oparte o web_search "
-                "wymagają klucza Anthropic"
+                "Brak klucza AI (GEMINI_API_KEY lub ANTHROPIC_API_KEY) — kanały "
+                "oparte o web_search wymagają skonfigurowanego dostawcy AI"
             )
 
         company_domain = (config.get("company_domain") or "").strip() or None
@@ -142,55 +143,35 @@ class WebSearchScraper(BaseScraper):
         return signals
 
     async def _search(self, query: str, max_results: int) -> str:
-        from anthropic import AsyncAnthropic
-
-        client_kwargs: dict[str, Any] = {"api_key": settings.anthropic_api_key}
-        if settings.anthropic_base_url:
-            client_kwargs["base_url"] = settings.anthropic_base_url
-        client = AsyncAnthropic(**client_kwargs)
         label = self.meta["label"]
         hint = self.meta["hint"]
+        prompt = (
+            f"Jesteś silnikiem sygnałów zakupowych (intent data) "
+            f"dla polskiego B2B. Kanał: {label}.\n\n"
+            f"Wyszukaj w internecie NAJNOWSZE (preferuj ostatnie "
+            f"30-90 dni) wyniki dla zapytania:\n{query}\n\n"
+            f"Interesują nas: {hint}.\n\n"
+            f"Zwróć maksymalnie {max_results} pozycji jako "
+            f"WYŁĄCZNIE poprawny JSON array obiektów:\n"
+            "[{\n"
+            '  "title": string,        // krótki tytuł sygnału\n'
+            '  "url": string|null,      // link do źródła\n'
+            '  "company_name": string|null, // firma której dotyczy\n'
+            '  "company_domain": string|null, // domena firmy jeśli znana\n'
+            '  "summary": string,       // 1-2 zdania po polsku\n'
+            '  "published": string|null // data publikacji jeśli znana\n'
+            "}]\n\n"
+            "Bez komentarzy, bez markdown — sam JSON array. Jeśli "
+            "nic nie znajdziesz, zwróć []. Nie zmyślaj firm ani "
+            "linków."
+        )
         try:
-            response = await client.messages.create(
-                model=settings.anthropic_model_fast,
-                max_tokens=2500,
-                tools=[{"type": "web_search_20260209", "name": "web_search"}],
-                messages=[
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Jesteś silnikiem sygnałów zakupowych (intent data) "
-                            f"dla polskiego B2B. Kanał: {label}.\n\n"
-                            f"Wyszukaj w internecie NAJNOWSZE (preferuj ostatnie "
-                            f"30-90 dni) wyniki dla zapytania:\n{query}\n\n"
-                            f"Interesują nas: {hint}.\n\n"
-                            f"Zwróć maksymalnie {max_results} pozycji jako "
-                            f"WYŁĄCZNIE poprawny JSON array obiektów:\n"
-                            "[{\n"
-                            '  "title": string,        // krótki tytuł sygnału\n'
-                            '  "url": string|null,      // link do źródła\n'
-                            '  "company_name": string|null, // firma której dotyczy\n'
-                            '  "company_domain": string|null, // domena firmy jeśli znana\n'
-                            '  "summary": string,       // 1-2 zdania po polsku\n'
-                            '  "published": string|null // data publikacji jeśli znana\n'
-                            "}]\n\n"
-                            "Bez komentarzy, bez markdown — sam JSON array. Jeśli "
-                            "nic nie znajdziesz, zwróć []. Nie zmyślaj firm ani "
-                            "linków."
-                        ),
-                    }
-                ],
-            )
+            return await llm.web_search_text(prompt, max_tokens=2500)
         except Exception as e:
             logger.exception("web_search (%s) failed for %r", self.channel, query)
             raise RuntimeError(
-                f"Claude web_search nie powiódł się: {type(e).__name__}: {e}"
+                f"web_search nie powiódł się: {type(e).__name__}: {e}"
             ) from e
-
-        texts = [
-            b.text for b in response.content if b.type == "text" and b.text.strip()
-        ]
-        return "\n".join(texts)
 
     def _parse_items(self, text: str) -> list[dict]:
         if not text:

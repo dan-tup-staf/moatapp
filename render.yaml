@@ -10,7 +10,9 @@
 #   2. Na Render: New → Blueprint → podłącz to repo (branch z tą zmianą).
 #   3. Render zapyta o sekrety oznaczone `sync: false`:
 #        - DATABASE_URL      → wklej URL z Neona
-#        - ANTHROPIC_API_KEY → klucz Anthropic (opcjonalny; puste = bez AI)
+#        - GEMINI_API_KEY    → DARMOWY klucz z https://aistudio.google.com
+#                              (zasila ICP + kanały web_search za 0 zł)
+#        - ANTHROPIC_API_KEY → płatna alternatywa (zostaw puste, jeśli używasz Gemini)
 #   4. Deploy. Frontend sam podepnie się pod API (NEXT_PUBLIC_API_URL).
 #
 # Uwaga: darmowe usługi usypiają po 15 min bezczynności (zimny start ~1 min).
@@ -29,8 +31,10 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false # wklej connection string z Neon (postgresql://...)
+      - key: GEMINI_API_KEY
+        sync: false # DARMOWY (aistudio.google.com) — zasila ICP + web_search
       - key: ANTHROPIC_API_KEY
-        sync: false # opcjonalnie — dla ICP / kanałów web_search
+        sync: false # płatna alternatywa; puste, jeśli używasz Gemini
       - key: JWT_SECRET
         generateValue: true
       - key: CORS_ALLOW_ALL
