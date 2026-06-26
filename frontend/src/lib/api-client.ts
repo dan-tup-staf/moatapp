@@ -205,6 +205,13 @@ export type EnrollmentStatus =
   | "replied"
   | "bounced";
 
+export type EnrollmentOutcome =
+  | "interested"
+  | "meeting_booked"
+  | "closed_won"
+  | "not_interested"
+  | "out_of_office";
+
 export type Enrollment = {
   id: number;
   campaign_id: number;
@@ -212,11 +219,40 @@ export type Enrollment = {
   current_step: number;
   next_send_at: string | null;
   status: EnrollmentStatus;
+  outcome: EnrollmentOutcome | null;
+  tags: string[];
   created_at: string;
   updated_at: string;
   lead_email: string | null;
   lead_name: string | null;
   lead_company: string | null;
+  lead_title: string | null;
+  sent_count: number;
+  opened_count: number;
+  clicked_count: number;
+  last_activity_at: string | null;
+};
+
+export type EnrollmentUpdate = {
+  outcome?: EnrollmentOutcome;
+  clear_outcome?: boolean;
+  tags?: string[];
+  status?: EnrollmentStatus;
+};
+
+export type BulkAction =
+  | "pause"
+  | "resume"
+  | "remove"
+  | "add_tag"
+  | "set_outcome"
+  | "clear_outcome";
+
+export type EnrollmentBulkRequest = {
+  enrollment_ids: number[];
+  action: BulkAction;
+  tag?: string;
+  outcome?: EnrollmentOutcome;
 };
 
 export type EnrollResult = {
@@ -256,12 +292,27 @@ export type CampaignPipelineStage = {
   tier3: number;
 };
 
+export type ProspectFunnel = {
+  total: number;
+  not_contacted: number;
+  contacted: number;
+  opened: number;
+  clicked: number;
+  replied: number;
+  interested: number;
+  meeting_booked: number;
+  closed: number;
+  not_interested: number;
+  out_of_office: number;
+};
+
 export type CampaignStats = {
   enrollments: EnrollmentsBreakdown;
   messages_sent_total: number;
   messages_failed_total: number;
   steps: StepStats[];
   pipeline: CampaignPipelineStage[];
+  funnel: ProspectFunnel;
 };
 
 export type AudienceCriteria = {
@@ -773,6 +824,22 @@ export const api = {
       authed<void>(`/campaigns/${campaignId}/enrollments/${enrollmentId}`, {
         method: "DELETE",
       }),
+
+    updateEnrollment: (
+      campaignId: number,
+      enrollmentId: number,
+      patch: EnrollmentUpdate,
+    ) =>
+      authed<Enrollment>(
+        `/campaigns/${campaignId}/enrollments/${enrollmentId}`,
+        { method: "PATCH", body: JSON.stringify(patch) },
+      ),
+
+    bulkEnrollments: (campaignId: number, req: EnrollmentBulkRequest) =>
+      authed<{ affected: number }>(
+        `/campaigns/${campaignId}/enrollments/bulk`,
+        { method: "POST", body: JSON.stringify(req) },
+      ),
 
     preview: (campaignId: number, stepId: number, leadId: number) =>
       authed<PreviewResponse>(`/campaigns/${campaignId}/preview`, {

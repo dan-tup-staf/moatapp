@@ -15,12 +15,31 @@ from app.models.message import Message
 from app.models.sequence_step import SequenceStep
 from app.models.sequence_step_variant import StepVariant
 from app.schemas.campaigns import (
+    BulkAction,
     CampaignCreate,
     CampaignUpdate,
+    EnrollmentBulkRequest,
+    EnrollmentUpdate,
     EnrollResult,
     StepCreate,
     StepUpdate,
 )
+
+
+def split_tags(raw: str | None) -> list[str]:
+    """`'a, b ,c'` -> `['a','b','c']`."""
+    if not raw:
+        return []
+    return [t.strip() for t in raw.split(",") if t.strip()]
+
+
+def join_tags(tags: list[str]) -> str:
+    seen: list[str] = []
+    for t in tags:
+        t = t.strip()
+        if t and t not in seen:
+            seen.append(t)
+    return ",".join(seen)
 
 # ---------- Campaigns ----------
 
@@ -504,16 +523,95 @@ async def enroll_from_list(
 
 async def list_enrollments(
     db: AsyncSession, campaign_id: int
-) -> list[tuple[CampaignEnrollment, Lead]]:
-    """Returns (enrollment, lead) tuples joined for display."""
+) -> list[tuple]:
+    """Returns (enrollment, lead, sent, opened, clicked, last_activity) tuples
+    joined + aggregated for the Prospects table."""
+    agg = (
+        select(
+            Message.enrollment_id.label("eid"),
+            func.coalesce(
+                func.sum(case((Message.status == "sent", 1), else_=0)), 0
+            ).label("sent"),
+            func.coalesce(
+                func.sum(case((Message.opened_at.isnot(None), 1), else_=0)), 0
+            ).label("opened"),
+            func.coalesce(
+                func.sum(case((Message.clicked_at.isnot(None), 1), else_=0)), 0
+            ).label("clicked"),
+            func.max(
+                func.greatest(
+                    Message.sent_at, Message.opened_at, Message.clicked_at
+                )
+            ).label("last_act"),
+        )
+        .group_by(Message.enrollment_id)
+        .subquery()
+    )
     stmt = (
-        select(CampaignEnrollment, Lead)
+        select(
+            CampaignEnrollment,
+            Lead,
+            agg.c.sent,
+            agg.c.opened,
+            agg.c.clicked,
+            agg.c.last_act,
+        )
         .join(Lead, Lead.id == CampaignEnrollment.lead_id)
+        .outerjoin(agg, agg.c.eid == CampaignEnrollment.id)
         .where(CampaignEnrollment.campaign_id == campaign_id)
         .order_by(CampaignEnrollment.created_at.desc())
     )
     result = await db.execute(stmt)
-    return [(row[0], row[1]) for row in result.all()]
+    return [tuple(row) for row in result.all()]
+
+
+async def update_enrollment(
+    db: AsyncSession,
+    enrollment: CampaignEnrollment,
+    payload: EnrollmentUpdate,
+) -> CampaignEnrollment:
+    if payload.tags is not None:
+        enrollment.tags = join_tags(payload.tags)
+    if payload.clear_outcome:
+        enrollment.outcome = None
+    elif payload.outcome is not None:
+        enrollment.outcome = payload.outcome.value
+    if payload.status is not None:
+        enrollment.status = payload.status.value
+    await db.commit()
+    await db.refresh(enrollment)
+    return enrollment
+
+
+async def bulk_enrollment_action(
+    db: AsyncSession, campaign_id: int, req: EnrollmentBulkRequest
+) -> int:
+    stmt = select(CampaignEnrollment).where(
+        CampaignEnrollment.campaign_id == campaign_id,
+        CampaignEnrollment.id.in_(req.enrollment_ids),
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    affected = 0
+    for enr in rows:
+        if req.action == BulkAction.PAUSE:
+            if enr.status == "active":
+                enr.status = "paused"
+        elif req.action == BulkAction.RESUME:
+            if enr.status == "paused":
+                enr.status = "active"
+        elif req.action == BulkAction.REMOVE:
+            await db.delete(enr)
+        elif req.action == BulkAction.ADD_TAG and req.tag:
+            enr.tags = join_tags(split_tags(enr.tags) + [req.tag])
+        elif req.action == BulkAction.SET_OUTCOME and req.outcome:
+            enr.outcome = req.outcome.value
+        elif req.action == BulkAction.CLEAR_OUTCOME:
+            enr.outcome = None
+        else:
+            continue
+        affected += 1
+    await db.commit()
+    return affected
 
 
 async def get_enrollment(
@@ -594,6 +692,7 @@ async def get_campaign_stats(
     step_rows = (await db.execute(step_stmt)).all()
 
     pipeline = await _campaign_pipeline_buckets(db, campaign_id)
+    funnel = await _prospect_funnel(db, campaign_id)
 
     return {
         "enrollments": {
@@ -617,7 +716,73 @@ async def get_campaign_stats(
             for row in step_rows
         ],
         "pipeline": pipeline,
+        "funnel": funnel,
     }
+
+
+async def _prospect_funnel(db: AsyncSession, campaign_id: int) -> dict:
+    """Saleshandy-style status bar: derive engagement buckets per enrollment
+    from message tracking + manual outcome."""
+    stmt = (
+        select(
+            CampaignEnrollment.id,
+            CampaignEnrollment.status,
+            CampaignEnrollment.outcome,
+            func.coalesce(
+                func.sum(case((Message.status == "sent", 1), else_=0)), 0
+            ),
+            func.coalesce(
+                func.sum(case((Message.opened_at.isnot(None), 1), else_=0)), 0
+            ),
+            func.coalesce(
+                func.sum(case((Message.clicked_at.isnot(None), 1), else_=0)), 0
+            ),
+        )
+        .outerjoin(Message, Message.enrollment_id == CampaignEnrollment.id)
+        .where(CampaignEnrollment.campaign_id == campaign_id)
+        .group_by(
+            CampaignEnrollment.id,
+            CampaignEnrollment.status,
+            CampaignEnrollment.outcome,
+        )
+    )
+    rows = (await db.execute(stmt)).all()
+    f = {
+        "total": 0,
+        "not_contacted": 0,
+        "contacted": 0,
+        "opened": 0,
+        "clicked": 0,
+        "replied": 0,
+        "interested": 0,
+        "meeting_booked": 0,
+        "closed": 0,
+        "not_interested": 0,
+        "out_of_office": 0,
+    }
+    outcome_keys = {
+        "interested": "interested",
+        "meeting_booked": "meeting_booked",
+        "closed_won": "closed",
+        "not_interested": "not_interested",
+        "out_of_office": "out_of_office",
+    }
+    for _id, status, outcome, sent, opened, clicked in rows:
+        f["total"] += 1
+        if (sent or 0) > 0:
+            f["contacted"] += 1
+        else:
+            f["not_contacted"] += 1
+        if (opened or 0) > 0:
+            f["opened"] += 1
+        if (clicked or 0) > 0:
+            f["clicked"] += 1
+        if status == "replied":
+            f["replied"] += 1
+        key = outcome_keys.get(outcome or "")
+        if key:
+            f[key] += 1
+    return f
 
 
 async def _campaign_pipeline_buckets(

@@ -11,13 +11,13 @@ B2B SaaS do outreachu opartego o sygnały zakupowe (intent data). Stack:
   `backend/app/llm.py` (Gemini albo Anthropic — pierwszy skonfigurowany wygrywa).
 
 ## ⚠️ Workflow gita/deployu (KLUCZOWE)
-- Pracujemy na branchu **`claude/awesome-babbage-hjyva9`**, ALE **Render buduje
-  `main`**. Dlatego **po KAŻDEJ zmianie: commit → merge --ff-only do `main` →
-  push `main` i push brancha**. Inaczej user nie zobaczy zmian.
+- Pracujemy na branchu **`claude/moation-project-sections-6avucy`**, ALE **Render
+  buduje `main`**. Dlatego **po KAŻDEJ zmianie: commit → merge --ff-only do `main`
+  → push `main` i push brancha**. Inaczej user nie zobaczy zmian.
 - Render: **`moation-api`** (backend) i **`moation-web`** (frontend). Deploy
   `moation-api` odpala `alembic upgrade head` (migracje w `backend/alembic/versions/`).
 - Po zmianach user robi „Deploy latest commit" (lub ma Auto-Deploy: Yes).
-- Migracje są addytywne (0008–0013). Najnowsza migracja: `0013`.
+- Migracje są addytywne (0008–0014). Najnowsza migracja: `0014`.
 
 ## Konta / dostęp
 - Login do appki: `daniel.tupczynski@staffly.pl`, hasło ustawione na `Moation2026!`
@@ -68,9 +68,17 @@ screenów** (karty, kolory, ikony lucide, ładne stany). Uwaga: ikony brandowe
   Konto→Użytkownicy, Konto→Płatności (komponent `ComingSoon`).
 
 ## Backlog (do zrobienia, 1:1 ze screenami) — szczegóły w UX_PLAN.md
-1. **Prospects (Odbiorcy) 1:1:** pasek statusów (Total→Not Contacted→Contacted→
-   Opened→Replied→Interested→Meeting→Closed→Out of Office), kolumny Outcome
-   (dropdown), Tags, Last activity, toolbar masowy.
+1. ✅ **Prospects (Odbiorcy) 1:1 — ZROBIONE.** `frontend/src/components/prospects.tsx`
+   (`ProspectsTab`): pasek statusów (Wszyscy/Bez kontaktu/Skontaktowani/Otwarcia/
+   Kliknięcia/Odpowiedzi/Zainteresowani/Spotkania/Zamknięci/Poza biurem) jako
+   klikane filtry, kolumna **Outcome** (dropdown: interested/meeting_booked/
+   closed_won/not_interested/out_of_office), **Tagi** (inline add/remove),
+   per-prospect statystyki (wysłane/otwarcia/kliknięcia), Last activity, toolbar
+   masowy (taguj, outcome, pauza/wznów, usuń, eksport CSV) + search. Backend:
+   migracja `0014` (`campaign_enrollments.outcome` + `tags`), `EnrollmentRead`
+   wzbogacony (sent/opened/clicked/last_activity_at), `PATCH .../enrollments/{id}`,
+   `POST .../enrollments/bulk`, `CampaignStats.funnel` (ProspectFunnel).
+   TODO dalej: weryfikacja maila (ikona), reply tracking realny (IMAP).
 2. **Email Accounts / Dostarczalność 1:1:** tabela skrzynek (Setup Score, Inbox
    Score, Warm-up Status, Deliverability %, SPF/DKIM/DMARC/PTR), rotacja nadawców.
 3. **Domeny:** dopieszczenie wizualne (score ring, kolory).

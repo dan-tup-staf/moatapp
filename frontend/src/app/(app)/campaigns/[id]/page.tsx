@@ -35,6 +35,7 @@ import {
   StepVariant,
 } from "@/lib/api-client";
 import { StepsTab } from "@/components/sequence-steps";
+import { ProspectsTab } from "@/components/prospects";
 
 const CHANNEL_LABELS: Record<StepChannel, string> = {
   email: "Email",
@@ -268,15 +269,6 @@ export default function CampaignDetailPage() {
     }
   }
 
-  async function handleUnenroll(id: number) {
-    try {
-      await api.campaigns.unenroll(campaignId, id);
-      await refresh();
-    } catch (err) {
-      alert(err instanceof ApiError ? err.detail : "Błąd");
-    }
-  }
-
   const statsByStepId = useMemo(() => {
     const m = new Map<number, StepStats>();
     stats?.steps.forEach((s) => m.set(s.step_id, s));
@@ -442,123 +434,30 @@ export default function CampaignDetailPage() {
               onToggle={() => setShowPipeline(!showPipeline)}
             />
           )}
-          <section className="rounded-xl border border-gray-200 bg-white">
-            <div className="border-b border-gray-200 p-4">
-              <h3 className="text-sm font-medium text-gray-700">
-                Odbiorcy{" "}
-                <span className="text-xs font-normal text-gray-500">
-                  ({enrollments.length})
-                </span>
-              </h3>
-            </div>
-          <div className="space-y-3 p-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                onClick={() => setShowBuilder(!showBuilder)}
-                className="rounded-md bg-gray-900 px-3 py-1.5 text-sm text-white hover:bg-gray-800"
-              >
-                {showBuilder ? "Zwiń builder" : "+ Dobierz leady"}
-              </button>
+          {showBuilder && (
+            <AudienceBuilder
+              campaignId={campaignId}
+              lists={lists}
+              sources={sources}
+              onEnroll={handleAudienceEnroll}
+              onCancel={() => setShowBuilder(false)}
+            />
+          )}
 
-              <button
-                onClick={handleSendDueNow}
-                disabled={sending || enrollments.length === 0}
-                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-100 disabled:opacity-50"
-                title="Wyślij enrollmenty z next_send_at <= now()"
-              >
-                {sending ? "Wysyłam..." : "Wyślij due teraz"}
-              </button>
-            </div>
+          {enrollMsg && (
+            <p className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-700">
+              {enrollMsg}
+            </p>
+          )}
 
-            {showBuilder && (
-              <AudienceBuilder
-                campaignId={campaignId}
-                lists={lists}
-                sources={sources}
-                onEnroll={handleAudienceEnroll}
-                onCancel={() => setShowBuilder(false)}
-              />
-            )}
-
-            {enrollMsg && (
-              <p className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-700">
-                {enrollMsg}
-              </p>
-            )}
-            {sendMsg && (
-              <p className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-700">
-                {sendMsg}
-              </p>
-            )}
-
-            {enrollments.length === 0 ? (
-              <p className="text-sm text-gray-500">Brak enrollmentów.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-medium text-gray-700">
-                        Lead
-                      </th>
-                      <th className="px-3 py-2 text-left font-medium text-gray-700">
-                        Firma
-                      </th>
-                      <th className="px-3 py-2 text-left font-medium text-gray-700">
-                        Status
-                      </th>
-                      <th className="px-3 py-2 text-right font-medium text-gray-700">
-                        Step
-                      </th>
-                      <th className="px-3 py-2 text-left font-medium text-gray-700">
-                        Następna wysyłka
-                      </th>
-                      <th className="px-3 py-2"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {enrollments.map((e) => (
-                      <tr key={e.id} className="hover:bg-gray-50">
-                        <td className="px-3 py-2">
-                          <div className="text-gray-900">{e.lead_email}</div>
-                          {e.lead_name && (
-                            <div className="text-xs text-gray-500">
-                              {e.lead_name}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-gray-700">
-                          {e.lead_company || "—"}
-                        </td>
-                        <td className="px-3 py-2">
-                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs">
-                            {e.status}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-right font-mono">
-                          {e.current_step}
-                        </td>
-                        <td className="px-3 py-2 text-xs text-gray-600">
-                          {e.next_send_at
-                            ? new Date(e.next_send_at).toLocaleString("pl-PL")
-                            : "—"}
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          <button
-                            onClick={() => handleUnenroll(e.id)}
-                            className="text-xs text-red-600 hover:underline"
-                          >
-                            Usuń
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-          </section>
+          <ProspectsTab
+            campaignId={campaignId}
+            enrollments={enrollments}
+            funnel={stats?.funnel ?? null}
+            onRefresh={refresh}
+            onAddLeads={() => setShowBuilder((s) => !s)}
+            builderOpen={showBuilder}
+          />
 
           {steps.length > 0 && enrollments.length > 0 && (
             <PreviewSection

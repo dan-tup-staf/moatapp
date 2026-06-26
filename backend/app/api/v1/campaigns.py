@@ -17,8 +17,11 @@ from app.schemas.campaigns import (
     CampaignRead,
     CampaignStats,
     CampaignUpdate,
+    BulkResult,
     EnrollFromList,
+    EnrollmentBulkRequest,
     EnrollmentRead,
+    EnrollmentUpdate,
     EnrollResult,
     PreviewRequest,
     PreviewResponse,
@@ -355,12 +358,18 @@ async def list_enrollments(
     await _ensure_owned_campaign(db, current, campaign_id)
     rows = await svc.list_enrollments(db, campaign_id)
     out: list[EnrollmentRead] = []
-    for enr, lead in rows:
+    for enr, lead, sent, opened, clicked, last_act in rows:
         item = EnrollmentRead.model_validate(enr)
+        item.tags = svc.split_tags(enr.tags)
         item.lead_email = lead.email
         full = " ".join(filter(None, [lead.first_name, lead.last_name]))
         item.lead_name = full or None
         item.lead_company = lead.company
+        item.lead_title = lead.title
+        item.sent_count = int(sent or 0)
+        item.opened_count = int(opened or 0)
+        item.clicked_count = int(clicked or 0)
+        item.last_activity_at = last_act
         out.append(item)
     return out
 
@@ -401,6 +410,41 @@ async def audience_enroll(
 ) -> EnrollResult:
     await _ensure_owned_campaign(db, current, campaign_id)
     return await svc.enroll_leads(db, current.id, campaign_id, payload.lead_ids)
+
+
+@router.patch(
+    "/{campaign_id}/enrollments/{enrollment_id}",
+    response_model=EnrollmentRead,
+)
+async def update_enrollment(
+    campaign_id: int,
+    enrollment_id: int,
+    payload: EnrollmentUpdate,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> EnrollmentRead:
+    await _ensure_owned_campaign(db, current, campaign_id)
+    enr = await svc.get_enrollment(db, campaign_id, enrollment_id)
+    if enr is None:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    enr = await svc.update_enrollment(db, enr, payload)
+    item = EnrollmentRead.model_validate(enr)
+    item.tags = svc.split_tags(enr.tags)
+    return item
+
+
+@router.post(
+    "/{campaign_id}/enrollments/bulk", response_model=BulkResult
+)
+async def bulk_enrollments(
+    campaign_id: int,
+    payload: EnrollmentBulkRequest,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BulkResult:
+    await _ensure_owned_campaign(db, current, campaign_id)
+    affected = await svc.bulk_enrollment_action(db, campaign_id, payload)
+    return BulkResult(affected=affected)
 
 
 @router.delete(

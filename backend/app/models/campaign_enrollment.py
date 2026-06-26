@@ -27,6 +27,11 @@ class CampaignEnrollment(Base):
         DateTime(timezone=True), nullable=True
     )
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    # Manual outcome set by the user (interested / meeting_booked / closed_won /
+    # not_interested / out_of_office). Drives the prospect funnel + outcome column.
+    outcome: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Comma-separated free-form tags for filtering/segmentation.
+    tags: Mapped[str] = mapped_column(String(512), nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

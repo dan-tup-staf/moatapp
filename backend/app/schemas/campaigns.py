@@ -29,6 +29,14 @@ class EnrollmentStatus(str, Enum):
     BOUNCED = "bounced"
 
 
+class EnrollmentOutcome(str, Enum):
+    INTERESTED = "interested"
+    MEETING_BOOKED = "meeting_booked"
+    CLOSED_WON = "closed_won"
+    NOT_INTERESTED = "not_interested"
+    OUT_OF_OFFICE = "out_of_office"
+
+
 # ---------- SequenceStep ----------
 
 
@@ -139,12 +147,49 @@ class EnrollmentRead(BaseModel):
     current_step: int
     next_send_at: datetime | None
     status: EnrollmentStatus
+    outcome: EnrollmentOutcome | None = None
+    tags: list[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
     # Denormalized lead info for the enrollment listing
     lead_email: str | None = None
     lead_name: str | None = None
     lead_company: str | None = None
+    lead_title: str | None = None
+    # Per-prospect engagement (aggregated from messages)
+    sent_count: int = 0
+    opened_count: int = 0
+    clicked_count: int = 0
+    last_activity_at: datetime | None = None
+
+
+class EnrollmentUpdate(BaseModel):
+    """Inline edits from the Prospects table (outcome / tags / pause-resume)."""
+
+    outcome: EnrollmentOutcome | None = None
+    clear_outcome: bool = False
+    tags: list[str] | None = None
+    status: EnrollmentStatus | None = None
+
+
+class BulkAction(str, Enum):
+    PAUSE = "pause"
+    RESUME = "resume"
+    REMOVE = "remove"
+    ADD_TAG = "add_tag"
+    SET_OUTCOME = "set_outcome"
+    CLEAR_OUTCOME = "clear_outcome"
+
+
+class EnrollmentBulkRequest(BaseModel):
+    enrollment_ids: list[int] = Field(min_length=1)
+    action: BulkAction
+    tag: str | None = None
+    outcome: EnrollmentOutcome | None = None
+
+
+class BulkResult(BaseModel):
+    affected: int
 
 
 class EnrollResult(BaseModel):
@@ -252,6 +297,22 @@ class CampaignPipelineStage(BaseModel):
     tier3: int
 
 
+class ProspectFunnel(BaseModel):
+    """Saleshandy-style status bar counts for the Prospects tab."""
+
+    total: int = 0
+    not_contacted: int = 0
+    contacted: int = 0
+    opened: int = 0
+    clicked: int = 0
+    replied: int = 0
+    interested: int = 0
+    meeting_booked: int = 0
+    closed: int = 0
+    not_interested: int = 0
+    out_of_office: int = 0
+
+
 class CampaignStats(BaseModel):
     """Per-step + overall metrics for the lemlist-style detail view."""
 
@@ -260,3 +321,4 @@ class CampaignStats(BaseModel):
     messages_failed_total: int
     steps: list[StepStats]
     pipeline: list[CampaignPipelineStage]
+    funnel: ProspectFunnel = Field(default_factory=ProspectFunnel)
