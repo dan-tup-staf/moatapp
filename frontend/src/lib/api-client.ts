@@ -127,6 +127,7 @@ export type Campaign = {
   send_days: string;
   include_unsubscribe: boolean;
   unsubscribe_text: string | null;
+  track_opens: boolean;
   created_at: string;
   updated_at: string;
   steps_count: number;
@@ -147,6 +148,7 @@ export type CampaignUpdate = Partial<CampaignCreate> & {
   send_days?: string;
   include_unsubscribe?: boolean;
   unsubscribe_text?: string | null;
+  track_opens?: boolean;
 };
 
 export type StepChannel =
@@ -219,6 +221,7 @@ export type StepStats = {
   step_order: number;
   sent_count: number;
   failed_count: number;
+  opened_count: number;
 };
 
 export type EnrollmentsBreakdown = {

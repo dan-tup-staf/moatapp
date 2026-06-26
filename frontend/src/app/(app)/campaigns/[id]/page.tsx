@@ -588,6 +588,7 @@ function SettingsPanel({
     campaign.include_unsubscribe,
   );
   const [unsubText, setUnsubText] = useState(campaign.unsubscribe_text ?? "");
+  const [trackOpens, setTrackOpens] = useState(campaign.track_opens);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -617,6 +618,7 @@ function SettingsPanel({
           Array.from(days).sort((a, b) => a - b).join(",") || "1,2,3,4,5,6,7",
         include_unsubscribe: includeUnsub,
         unsubscribe_text: unsubText || null,
+        track_opens: trackOpens,
       });
       await onSaved();
       onClose();
@@ -788,6 +790,24 @@ function SettingsPanel({
         </p>
       </div>
 
+      {/* Śledzenie otwarć */}
+      <div className="space-y-2 border-t border-gray-200 pt-3">
+        <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+          <input
+            type="checkbox"
+            checked={trackOpens}
+            onChange={(e) => setTrackOpens(e.target.checked)}
+            className="h-4 w-4"
+          />
+          Śledź otwarcia maili (pixel)
+        </label>
+        <p className="text-xs text-gray-500">
+          Pokazuje, kto otworzył maila (kolumna „otwarcia"). Wymaga wersji HTML
+          maila — może lekko obniżyć dostarczalność. Działa po ustawieniu
+          TRACKING_BASE_URL na moation-api.
+        </p>
+      </div>
+
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button
         disabled={saving}
@@ -852,6 +872,7 @@ function StepCardCompact({
           <span className="text-emerald-700">
             ✓ {stats?.sent_count ?? 0}
           </span>
+          <span className="text-gray-500">👁 {stats?.opened_count ?? 0}</span>
           {stats && stats.failed_count > 0 && (
             <span className="text-red-600">✗ {stats.failed_count}</span>
           )}
@@ -1089,7 +1110,7 @@ function StepEditor({
           Edycja step #{step.step_order}
           {isEmail && stats && (
             <span className="ml-2 text-xs font-normal text-gray-500">
-              ✓ {stats.sent_count} wysłanych
+              ✓ {stats.sent_count} wysłanych · 👁 {stats.opened_count} otwarć
               {stats.failed_count > 0 && (
                 <> · ✗ {stats.failed_count} błędów</>
               )}

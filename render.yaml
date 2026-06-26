@@ -61,6 +61,8 @@ services:
         value: "false" # auto-scraping sygnałów (zużywa limit AI) — domyślnie off
       - key: CRON_SECRET
         sync: false # sekret do POST /api/v1/tick (dla darmowego zewnętrznego crona)
+      - key: TRACKING_BASE_URL
+        value: https://moation-api.onrender.com # publiczny adres API dla pixela otwarć
       - key: JWT_SECRET
         generateValue: true
       - key: CORS_ALLOW_ALL

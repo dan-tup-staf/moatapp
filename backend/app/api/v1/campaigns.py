@@ -49,6 +49,7 @@ def _to_campaign_read(c, steps_count: int, enrollments_count: int) -> CampaignRe
         send_days=c.send_days,
         include_unsubscribe=c.include_unsubscribe,
         unsubscribe_text=c.unsubscribe_text,
+        track_opens=c.track_opens,
         created_at=c.created_at,
         updated_at=c.updated_at,
         steps_count=steps_count,

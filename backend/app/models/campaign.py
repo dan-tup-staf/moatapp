@@ -46,6 +46,11 @@ class Campaign(Base):
         Boolean, nullable=False, server_default="false"
     )
     unsubscribe_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Open tracking via a 1x1 pixel (requires HTML email — small deliverability
+    # tradeoff, hence opt-in). Needs settings.tracking_base_url to be set.
+    track_opens: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

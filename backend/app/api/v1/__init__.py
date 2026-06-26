@@ -14,6 +14,7 @@ from app.api.v1 import (
     ops,
     signal_sources,
     signals,
+    track,
 )
 
 api_router = APIRouter()
@@ -29,4 +30,5 @@ api_router.include_router(crm.router)
 api_router.include_router(icp.router)
 api_router.include_router(email.router)
 api_router.include_router(domains.router)
+api_router.include_router(track.router)
 api_router.include_router(ops.router)

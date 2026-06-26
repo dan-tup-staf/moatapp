@@ -25,6 +25,7 @@ from app.models.lead import Lead
 from app.models.message import Message
 from app.models.sequence_step import SequenceStep
 from app.services.campaigns import list_variants, pick_variant, render_template
+from app.services.tracking import open_pixel_url
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,18 @@ def smtp_configured() -> bool:
     return bool(settings.smtp_username and settings.smtp_password)
 
 
+def _to_html(body: str, pixel_url: str) -> str:
+    import html as _html
+
+    esc = _html.escape(body).replace("\n", "<br>\n")
+    return (
+        f"<html><body>{esc}"
+        f'<img src="{pixel_url}" width="1" height="1" alt="" '
+        f'style="display:none">'
+        f"</body></html>"
+    )
+
+
 async def _send_via_smtp(
     *,
     to_email: str,
@@ -69,6 +82,7 @@ async def _send_via_smtp(
     from_name: str | None,
     subject: str,
     body: str,
+    html: str | None = None,
 ) -> None:
     # Prefer the authenticated mailbox address as the From — many providers
     # reject a From that doesn't match the logged-in account.
@@ -83,6 +97,8 @@ async def _send_via_smtp(
     # one-click handling is a later milestone.
     msg["List-Unsubscribe"] = f"<mailto:{actual_from}?subject=unsubscribe>"
     msg.set_content(body)
+    if html:
+        msg.add_alternative(html, subtype="html")
 
     await aiosmtplib.send(
         msg,
@@ -202,6 +218,13 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
             status="sent",
         )
         db.add(msg)
+        await db.flush()  # assign msg.id for the tracking pixel
+
+        html = None
+        if campaign.track_opens:
+            pixel = open_pixel_url(msg.id)
+            if pixel:
+                html = _to_html(body, pixel)
 
         try:
             await _send_via_smtp(
@@ -210,6 +233,7 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
                 from_name=campaign.from_name,
                 subject=subject,
                 body=body,
+                html=html,
             )
             msg.sent_at = datetime.now(timezone.utc)
             msg.status = "sent"

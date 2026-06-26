@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     # DNS-over-HTTPS endpoint for domain health checks (SPF/DKIM/DMARC/MX).
     doh_url: str = "https://dns.google/resolve"
 
+    # Public base URL of THIS API, used to build the open-tracking pixel URL
+    # (e.g. https://moation-api.onrender.com). Empty = open tracking disabled
+    # even if a campaign has track_opens on.
+    tracking_base_url: str = ""
+
     jwt_secret: str = "change-me-in-prod"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24

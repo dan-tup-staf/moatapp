@@ -93,6 +93,7 @@ class CampaignUpdate(BaseModel):
     send_days: str | None = Field(default=None, max_length=32)
     include_unsubscribe: bool | None = None
     unsubscribe_text: str | None = None
+    track_opens: bool | None = None
 
 
 class CampaignRead(BaseModel):
@@ -109,6 +110,7 @@ class CampaignRead(BaseModel):
     send_days: str = "1,2,3,4,5,6,7"
     include_unsubscribe: bool = False
     unsubscribe_text: str | None = None
+    track_opens: bool = False
     created_at: datetime
     updated_at: datetime
     steps_count: int = 0
@@ -222,6 +224,7 @@ class StepStats(BaseModel):
     step_order: int
     sent_count: int
     failed_count: int
+    opened_count: int = 0
 
 
 class EnrollmentsBreakdown(BaseModel):
