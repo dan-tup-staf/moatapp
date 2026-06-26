@@ -27,6 +27,8 @@ from app.schemas.campaigns import (
     StepTestSendRequest,
     StepTestSendResult,
     StepUpdate,
+    VariantCreate,
+    VariantRead,
 )
 from app.services import campaigns as svc
 from app.services.email_sender import _send_via_smtp, process_due_enrollments
@@ -241,6 +243,94 @@ async def test_send_step(
             detail=f"Wysyłka testowa nie powiodła się: {type(e).__name__}: {e}",
         )
     return StepTestSendResult(ok=True, sent_to=to, subject=subject)
+
+
+# ---------- Step A/B variants ----------
+
+
+async def _owned_step(db, current, campaign_id, step_id):
+    await _ensure_owned_campaign(db, current, campaign_id)
+    step = await svc.get_step(db, campaign_id, step_id)
+    if step is None:
+        raise HTTPException(status_code=404, detail="Step not found")
+    return step
+
+
+@router.get(
+    "/{campaign_id}/steps/{step_id}/variants",
+    response_model=list[VariantRead],
+)
+async def list_variants(
+    campaign_id: int,
+    step_id: int,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[VariantRead]:
+    await _owned_step(db, current, campaign_id, step_id)
+    variants = await svc.list_variants(db, step_id)
+    return [VariantRead.model_validate(v) for v in variants]
+
+
+@router.post(
+    "/{campaign_id}/steps/{step_id}/variants",
+    response_model=VariantRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_variant(
+    campaign_id: int,
+    step_id: int,
+    payload: VariantCreate,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> VariantRead:
+    await _owned_step(db, current, campaign_id, step_id)
+    obj = await svc.create_variant(
+        db, step_id, payload.subject, payload.body_template
+    )
+    return VariantRead.model_validate(obj)
+
+
+@router.post(
+    "/{campaign_id}/steps/{step_id}/variants/ai",
+    response_model=VariantRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def generate_ai_variant(
+    campaign_id: int,
+    step_id: int,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> VariantRead:
+    step = await _owned_step(db, current, campaign_id, step_id)
+    try:
+        gen = await svc.generate_ai_variant(step)
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Generowanie wariantu AI nie powiodło się: {e}",
+        )
+    obj = await svc.create_variant(
+        db, step_id, gen["subject"], gen["body_template"]
+    )
+    return VariantRead.model_validate(obj)
+
+
+@router.delete(
+    "/{campaign_id}/steps/{step_id}/variants/{variant_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_variant(
+    campaign_id: int,
+    step_id: int,
+    variant_id: int,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await _owned_step(db, current, campaign_id, step_id)
+    obj = await svc.get_variant(db, step_id, variant_id)
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Variant not found")
+    await svc.delete_variant(db, obj)
 
 
 # ---------- Enrollments ----------

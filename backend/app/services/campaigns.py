@@ -1,4 +1,5 @@
 import hashlib
+import json
 import re
 from datetime import datetime, timezone
 
@@ -12,6 +13,7 @@ from app.models.lead import Lead
 from app.models.lead_list import LeadList
 from app.models.message import Message
 from app.models.sequence_step import SequenceStep
+from app.models.sequence_step_variant import StepVariant
 from app.schemas.campaigns import (
     CampaignCreate,
     CampaignUpdate,
@@ -733,3 +735,75 @@ def render_template(template: str, lead: Lead) -> str:
     for k, v in variables.items():
         result = result.replace("{{" + k + "}}", v)
     return result
+
+
+# ---------- Step A/B variants ----------
+
+
+async def list_variants(db: AsyncSession, step_id: int) -> list[StepVariant]:
+    res = await db.execute(
+        select(StepVariant)
+        .where(StepVariant.step_id == step_id)
+        .order_by(StepVariant.id.asc())
+    )
+    return list(res.scalars().all())
+
+
+async def get_variant(
+    db: AsyncSession, step_id: int, variant_id: int
+) -> StepVariant | None:
+    res = await db.execute(
+        select(StepVariant).where(
+            StepVariant.id == variant_id, StepVariant.step_id == step_id
+        )
+    )
+    return res.scalar_one_or_none()
+
+
+async def create_variant(
+    db: AsyncSession, step_id: int, subject: str, body_template: str
+) -> StepVariant:
+    obj = StepVariant(
+        step_id=step_id, subject=subject, body_template=body_template
+    )
+    db.add(obj)
+    await db.commit()
+    await db.refresh(obj)
+    return obj
+
+
+async def delete_variant(db: AsyncSession, variant: StepVariant) -> None:
+    await db.delete(variant)
+    await db.commit()
+
+
+def pick_variant(options: list[tuple[str, str]], seed: str) -> tuple[str, str]:
+    """Deterministically choose one (subject, body) option for a recipient."""
+    if not options:
+        return ("", "")
+    digest = hashlib.md5(seed.encode("utf-8")).hexdigest()
+    return options[int(digest, 16) % len(options)]
+
+
+async def generate_ai_variant(step: SequenceStep) -> dict:
+    """Ask the AI to rewrite this step into an alternative variant (different
+    angle/wording, same intent). Returns {subject, body_template}."""
+    from app import llm
+
+    prompt = (
+        "Jesteś copywriterem cold-emaili B2B. Przepisz poniższy email na "
+        "ALTERNATYWNY wariant A/B: inny haczyk i sformułowania, ta sama "
+        "intencja i długość, ten sam język. Zachowaj zmienne w formacie "
+        "{{first_name}}, {{company}}, {{title}} oraz ewentualny spintax "
+        "{spin ...|... endspin}.\n\n"
+        "Zwróć WYŁĄCZNIE JSON: {\"subject\": string, \"body\": string}.\n\n"
+        f"TEMAT: {step.subject}\n\nTREŚĆ:\n{step.body_template}"
+    )
+    text = await llm.generate_text(prompt, max_tokens=900, json_mode=True)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as e:
+        raise RuntimeError("AI zwrócił niepoprawny format wariantu") from e
+    subject = str(data.get("subject", "")).strip() or step.subject
+    body = str(data.get("body", "")).strip() or step.body_template
+    return {"subject": subject[:255], "body_template": body}

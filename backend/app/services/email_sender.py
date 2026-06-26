@@ -24,7 +24,7 @@ from app.models.campaign_enrollment import CampaignEnrollment
 from app.models.lead import Lead
 from app.models.message import Message
 from app.models.sequence_step import SequenceStep
-from app.services.campaigns import render_template
+from app.services.campaigns import list_variants, pick_variant, render_template
 
 logger = logging.getLogger(__name__)
 
@@ -130,8 +130,16 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
     if step.channel != "email":
         msg = None
     else:
-        subject = render_template(step.subject, lead)
-        body = render_template(step.body_template, lead)
+        # A/B variants: the step itself is variant "A"; pick one per recipient.
+        variants = await list_variants(db, step.id)
+        options = [(step.subject, step.body_template)] + [
+            (v.subject, v.body_template) for v in variants
+        ]
+        chosen_subject, chosen_body = pick_variant(
+            options, f"{lead.email}|{step.id}"
+        )
+        subject = render_template(chosen_subject, lead)
+        body = render_template(chosen_body, lead)
 
         msg = Message(
             enrollment_id=enr.id,

@@ -165,6 +165,14 @@ export type StepCreate = {
 
 export type StepUpdate = Partial<StepCreate>;
 
+export type StepVariant = {
+  id: number;
+  step_id: number;
+  subject: string;
+  body_template: string;
+  created_at: string;
+};
+
 export type EnrollmentStatus =
   | "active"
   | "completed"
@@ -664,6 +672,31 @@ export const api = {
       authed<{ ok: boolean; sent_to: string; subject: string }>(
         `/campaigns/${campaignId}/steps/${stepId}/test-send`,
         { method: "POST", body: JSON.stringify({ to: to ?? null }) },
+      ),
+
+    // A/B variants (step's own subject/body is variant "A")
+    listVariants: (campaignId: number, stepId: number) =>
+      authed<StepVariant[]>(
+        `/campaigns/${campaignId}/steps/${stepId}/variants`,
+      ),
+    createVariant: (
+      campaignId: number,
+      stepId: number,
+      data: { subject: string; body_template: string },
+    ) =>
+      authed<StepVariant>(`/campaigns/${campaignId}/steps/${stepId}/variants`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    generateAiVariant: (campaignId: number, stepId: number) =>
+      authed<StepVariant>(
+        `/campaigns/${campaignId}/steps/${stepId}/variants/ai`,
+        { method: "POST" },
+      ),
+    deleteVariant: (campaignId: number, stepId: number, variantId: number) =>
+      authed<void>(
+        `/campaigns/${campaignId}/steps/${stepId}/variants/${variantId}`,
+        { method: "DELETE" },
       ),
 
     // Enrollments

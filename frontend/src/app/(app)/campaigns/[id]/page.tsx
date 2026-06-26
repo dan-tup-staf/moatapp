@@ -21,6 +21,7 @@ import {
   SignalSummary,
   StepChannel,
   StepStats,
+  StepVariant,
 } from "@/lib/api-client";
 
 const CHANNEL_LABELS: Record<StepChannel, string> = {
@@ -1073,6 +1074,8 @@ function StepEditor({
       </button>
     </form>
 
+    {isEmail && <VariantsSection campaignId={campaignId} stepId={step.id} />}
+
     {isEmail && (
       <div className="space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3">
         <p className="text-xs font-medium uppercase text-gray-500">
@@ -1114,6 +1117,181 @@ function StepEditor({
         </p>
       </div>
     )}
+    </div>
+  );
+}
+
+function VariantsSection({
+  campaignId,
+  stepId,
+}: {
+  campaignId: number;
+  stepId: number;
+}) {
+  const [variants, setVariants] = useState<StepVariant[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [genLoading, setGenLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [vSubject, setVSubject] = useState("");
+  const [vBody, setVBody] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function refresh() {
+    try {
+      setVariants(await api.campaigns.listVariants(campaignId, stepId));
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stepId]);
+
+  async function genAi() {
+    setGenLoading(true);
+    setErr(null);
+    try {
+      await api.campaigns.generateAiVariant(campaignId, stepId);
+      await refresh();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.detail : "Błąd generowania wariantu");
+    } finally {
+      setGenLoading(false);
+    }
+  }
+
+  async function addManual(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setErr(null);
+    try {
+      await api.campaigns.createVariant(campaignId, stepId, {
+        subject: vSubject,
+        body_template: vBody,
+      });
+      setVSubject("");
+      setVBody("");
+      setShowForm(false);
+      await refresh();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.detail : "Błąd zapisu wariantu");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function del(id: number) {
+    try {
+      await api.campaigns.deleteVariant(campaignId, stepId, id);
+      await refresh();
+    } catch (e) {
+      alert(e instanceof ApiError ? e.detail : "Błąd");
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-gray-200 bg-white p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-medium uppercase text-gray-500">
+          Warianty A/B
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={genAi}
+            disabled={genLoading}
+            className="rounded-md bg-violet-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+          >
+            {genLoading ? "Generuję…" : "✨ Generuj wariant AI"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowForm(!showForm)}
+            className="rounded-md border border-gray-300 px-2.5 py-1 text-xs hover:bg-gray-100"
+          >
+            + Dodaj ręcznie
+          </button>
+        </div>
+      </div>
+      <p className="text-xs text-gray-400">
+        Wariant A = treść powyżej. Dodatkowe warianty rotują losowo per odbiorca
+        (stały wybór dla danej osoby).
+      </p>
+
+      {err && (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          {err}
+        </p>
+      )}
+
+      {showForm && (
+        <form
+          onSubmit={addManual}
+          className="space-y-2 rounded-md border border-gray-200 p-2"
+        >
+          <input
+            value={vSubject}
+            onChange={(e) => setVSubject(e.target.value)}
+            required
+            placeholder="Temat wariantu"
+            className="block w-full rounded-md border border-gray-300 px-2 py-1 text-xs font-mono"
+          />
+          <textarea
+            value={vBody}
+            onChange={(e) => setVBody(e.target.value)}
+            required
+            rows={4}
+            placeholder="Treść wariantu (możesz użyć {{first_name}} i spintax)"
+            className="block w-full rounded-md border border-gray-300 px-2 py-1 text-xs font-mono"
+          />
+          <button
+            disabled={saving}
+            className="rounded-md bg-gray-900 px-3 py-1 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          >
+            {saving ? "Zapisuję…" : "Zapisz wariant"}
+          </button>
+        </form>
+      )}
+
+      {loading ? (
+        <p className="text-xs text-gray-400">Ładowanie…</p>
+      ) : variants.length === 0 ? (
+        <p className="text-xs text-gray-400">
+          Brak dodatkowych wariantów (wysyłany jest tylko A).
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {variants.map((v, i) => (
+            <li key={v.id} className="rounded-md border border-gray-200 p-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-gray-700">
+                    Wariant {String.fromCharCode(66 + i)}
+                  </p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {v.subject}
+                  </p>
+                  <p className="mt-0.5 line-clamp-2 whitespace-pre-wrap font-mono text-xs text-gray-500">
+                    {v.body_template}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => del(v.id)}
+                  className="shrink-0 text-xs text-red-600 hover:underline"
+                >
+                  Usuń
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

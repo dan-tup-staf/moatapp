@@ -57,6 +57,21 @@ class StepRead(BaseModel):
     channel: StepChannel
 
 
+class VariantCreate(BaseModel):
+    subject: str = Field(min_length=1, max_length=255)
+    body_template: str = Field(min_length=1)
+
+
+class VariantRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    step_id: int
+    subject: str
+    body_template: str
+    created_at: datetime
+
+
 # ---------- Campaign ----------
 
 
