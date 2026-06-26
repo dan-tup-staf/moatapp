@@ -34,6 +34,7 @@ async def create_campaign(
         from_email=payload.from_email,
         from_name=payload.from_name,
         scheduled_at=payload.scheduled_at,
+        group_id=payload.group_id,
     )
     db.add(obj)
     await db.commit()

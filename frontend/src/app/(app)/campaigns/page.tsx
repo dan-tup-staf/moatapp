@@ -81,7 +81,7 @@ export default function CampaignsPage() {
   async function handleDelete(id: number, name: string) {
     if (
       !window.confirm(
-        `Usunąć kampanię "${name}" razem ze stepami i enrollmentami?`,
+        `Usunąć sekwencję "${name}" razem z krokami i odbiorcami?`,
       )
     )
       return;
@@ -123,17 +123,18 @@ export default function CampaignsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Kampanie</h2>
+          <h2 className="text-2xl font-bold tracking-tight">Sekwencje</h2>
           <p className="mt-1 text-sm text-gray-600">
             {campaigns.length}{" "}
-            {campaigns.length === 1 ? "kampania" : "kampanii"}
+            {campaigns.length === 1 ? "sekwencja" : "sekwencji"} — ciągi kroków
+            outreachu (kroki, odbiorcy, ustawienia, wysyłka)
           </p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
           className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
         >
-          {showForm ? "Anuluj" : "+ Nowa kampania"}
+          {showForm ? "Anuluj" : "+ Nowa sekwencja"}
         </button>
       </div>
 
@@ -142,12 +143,12 @@ export default function CampaignsPage() {
           onSubmit={handleCreate}
           className="space-y-3 rounded-lg border border-gray-200 bg-white p-4"
         >
-          <h3 className="text-sm font-medium text-gray-700">Nowa kampania</h3>
+          <h3 className="text-sm font-medium text-gray-700">Nowa sekwencja</h3>
           <input
             type="text"
             required
             maxLength={255}
-            placeholder="Nazwa kampanii *"
+            placeholder="Nazwa sekwencji *"
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
@@ -195,7 +196,7 @@ export default function CampaignsPage() {
           <p className="p-4 text-sm text-gray-500">Ładowanie...</p>
         ) : campaigns.length === 0 ? (
           <p className="p-4 text-sm text-gray-500">
-            Brak kampanii. Kliknij „+ Nowa kampania" powyżej.
+            Brak sekwencji. Kliknij „+ Nowa sekwencja" powyżej.
           </p>
         ) : (
           <table className="min-w-full divide-y divide-gray-200 text-sm">

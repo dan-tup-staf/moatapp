@@ -11,6 +11,7 @@ import {
   AudienceLead,
   AudiencePreview,
   Campaign,
+  CampaignGroup,
   CampaignPipelineStage,
   CampaignStats,
   CampaignStatus,
@@ -589,8 +590,14 @@ function SettingsPanel({
   );
   const [unsubText, setUnsubText] = useState(campaign.unsubscribe_text ?? "");
   const [trackOpens, setTrackOpens] = useState(campaign.track_opens);
+  const [groupId, setGroupId] = useState<number | "">(campaign.group_id ?? "");
+  const [groups, setGroups] = useState<CampaignGroup[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.groups.list().then(setGroups).catch(() => {});
+  }, []);
 
   function toggleDay(d: number) {
     setDays((prev) => {
@@ -619,6 +626,7 @@ function SettingsPanel({
         include_unsubscribe: includeUnsub,
         unsubscribe_text: unsubText || null,
         track_opens: trackOpens,
+        group_id: groupId === "" ? null : Number(groupId),
       });
       await onSaved();
       onClose();
@@ -682,6 +690,26 @@ function SettingsPanel({
           </option>
         ))}
       </select>
+
+      <div>
+        <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
+          Kampania (parasol)
+        </label>
+        <select
+          value={groupId}
+          onChange={(e) =>
+            setGroupId(e.target.value === "" ? "" : Number(e.target.value))
+          }
+          className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+        >
+          <option value="">— bez kampanii —</option>
+          {groups.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <div>
         <label className="mb-1 block text-xs font-medium uppercase text-gray-500">

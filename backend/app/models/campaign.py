@@ -21,6 +21,12 @@ class Campaign(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    # Optional umbrella "Campaign" (group) this sequence belongs to.
+    group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("campaign_groups.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
     from_email: Mapped[str] = mapped_column(String(255), nullable=False)

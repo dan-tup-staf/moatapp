@@ -115,12 +115,20 @@ export type CsvImportResult = {
 
 export type CampaignStatus = "draft" | "active" | "paused" | "archived";
 
+export type CampaignGroup = {
+  id: number;
+  name: string;
+  created_at: string;
+  sequences_count: number;
+};
+
 export type Campaign = {
   id: number;
   name: string;
   status: CampaignStatus;
   from_email: string;
   from_name: string | null;
+  group_id: number | null;
   scheduled_at: string | null;
   send_window_start_hour: number;
   send_window_end_hour: number;
@@ -139,10 +147,12 @@ export type CampaignCreate = {
   from_email: string;
   from_name?: string;
   scheduled_at?: string | null;
+  group_id?: number | null;
 };
 
 export type CampaignUpdate = Partial<CampaignCreate> & {
   status?: CampaignStatus;
+  group_id?: number | null;
   send_window_start_hour?: number;
   send_window_end_hour?: number;
   send_days?: string;
@@ -590,6 +600,23 @@ export const api = {
       authed<DomainHealth>(
         `/domains/check?domain=${encodeURIComponent(domain)}`,
       ),
+  },
+
+  // Campaign groups (umbrella "Kampanie" over sequences)
+  groups: {
+    list: () => authed<CampaignGroup[]>("/campaign-groups"),
+    create: (name: string) =>
+      authed<CampaignGroup>("/campaign-groups", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      }),
+    update: (id: number, name: string) =>
+      authed<CampaignGroup>(`/campaign-groups/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      }),
+    delete: (id: number) =>
+      authed<void>(`/campaign-groups/${id}`, { method: "DELETE" }),
   },
 
   // Lists

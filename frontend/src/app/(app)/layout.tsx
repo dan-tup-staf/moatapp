@@ -15,6 +15,7 @@ import {
   List,
   LogOut,
   type LucideIcon,
+  Megaphone,
   Plug,
   Radar,
   Rocket,
@@ -50,7 +51,10 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     title: "Zaangażowanie",
-    items: [{ href: "/campaigns", label: "Kampanie", icon: Send }],
+    items: [
+      { href: "/groups", label: "Kampanie", icon: Megaphone },
+      { href: "/campaigns", label: "Sekwencje", icon: Send },
+    ],
   },
   {
     title: "Infrastruktura",
