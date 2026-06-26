@@ -539,6 +539,16 @@ function MiniStat({
   );
 }
 
+const DOW: [string, number][] = [
+  ["Pn", 1],
+  ["Wt", 2],
+  ["Śr", 3],
+  ["Cz", 4],
+  ["Pt", 5],
+  ["So", 6],
+  ["Nd", 7],
+];
+
 function isoToLocalInput(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -569,8 +579,26 @@ function SettingsPanel({
   const [scheduledLocal, setScheduledLocal] = useState(
     isoToLocalInput(campaign.scheduled_at),
   );
+  const [startHour, setStartHour] = useState(campaign.send_window_start_hour);
+  const [endHour, setEndHour] = useState(campaign.send_window_end_hour);
+  const [days, setDays] = useState<Set<number>>(
+    new Set(campaign.send_days.split(",").map(Number).filter(Boolean)),
+  );
+  const [includeUnsub, setIncludeUnsub] = useState(
+    campaign.include_unsubscribe,
+  );
+  const [unsubText, setUnsubText] = useState(campaign.unsubscribe_text ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function toggleDay(d: number) {
+    setDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(d)) next.delete(d);
+      else next.add(d);
+      return next;
+    });
+  }
 
   async function handleSave(e: FormEvent) {
     e.preventDefault();
@@ -583,6 +611,12 @@ function SettingsPanel({
         from_name: fromName || undefined,
         status,
         scheduled_at: localInputToIso(scheduledLocal),
+        send_window_start_hour: startHour,
+        send_window_end_hour: endHour,
+        send_days:
+          Array.from(days).sort((a, b) => a - b).join(",") || "1,2,3,4,5,6,7",
+        include_unsubscribe: includeUnsub,
+        unsubscribe_text: unsubText || null,
       });
       await onSaved();
       onClose();
@@ -672,6 +706,85 @@ function SettingsPanel({
           Puste = pierwszy krok rusza zaraz po zapisaniu leadów. Ustawiona
           przyszła data = pierwszy krok poczeka do tego momentu (kolejne kroki
           liczą się od niego wg opóźnień).
+        </p>
+      </div>
+
+      {/* Okno wysyłki */}
+      <div className="space-y-2 border-t border-gray-200 pt-3">
+        <label className="block text-xs font-medium uppercase text-gray-500">
+          Okno wysyłki (czas UTC)
+        </label>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-gray-600">od</span>
+          <input
+            type="number"
+            min={0}
+            max={24}
+            value={startHour}
+            onChange={(e) => setStartHour(Number(e.target.value))}
+            className="w-16 rounded-md border border-gray-300 px-2 py-1"
+          />
+          <span className="text-gray-600">do</span>
+          <input
+            type="number"
+            min={0}
+            max={24}
+            value={endHour}
+            onChange={(e) => setEndHour(Number(e.target.value))}
+            className="w-16 rounded-md border border-gray-300 px-2 py-1"
+          />
+          <span className="text-gray-400">godz.</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {DOW.map(([label, d]) => {
+            const on = days.has(d);
+            return (
+              <button
+                key={d}
+                type="button"
+                onClick={() => toggleDay(d)}
+                className={
+                  "rounded-full px-2.5 py-1 text-xs border transition " +
+                  (on
+                    ? "bg-gray-900 text-white border-gray-900"
+                    : "bg-white text-gray-700 border-gray-300 hover:border-gray-500")
+                }
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-xs text-gray-500">
+          Maile wychodzą tylko w tych godzinach i dniach; poza oknem wysyłka
+          przesuwa się na najbliższy dozwolony moment. Domyślnie 0–24, wszystkie
+          dni = bez ograniczeń.
+        </p>
+      </div>
+
+      {/* Wypis */}
+      <div className="space-y-2 border-t border-gray-200 pt-3">
+        <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+          <input
+            type="checkbox"
+            checked={includeUnsub}
+            onChange={(e) => setIncludeUnsub(e.target.checked)}
+            className="h-4 w-4"
+          />
+          Dołącz stopkę wypisu (unsubscribe)
+        </label>
+        {includeUnsub && (
+          <textarea
+            value={unsubText}
+            onChange={(e) => setUnsubText(e.target.value)}
+            rows={2}
+            placeholder="Jeśli nie chcesz otrzymywać kolejnych wiadomości, odpisz STOP."
+            className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          />
+        )}
+        <p className="text-xs text-gray-500">
+          Dopisywana na końcu każdego maila. Poprawia dostarczalność i jest
+          wymagana prawnie przy cold mailingu.
         </p>
       </div>
 

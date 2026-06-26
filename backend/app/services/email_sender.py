@@ -28,6 +28,34 @@ from app.services.campaigns import list_variants, pick_variant, render_template
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_UNSUB = (
+    "Jeśli nie chcesz otrzymywać kolejnych wiadomości, odpisz STOP."
+)
+
+
+def _allowed_days(send_days: str | None) -> set[int]:
+    out = {int(p) for p in (send_days or "").split(",") if p.strip().isdigit()}
+    return out or {1, 2, 3, 4, 5, 6, 7}
+
+
+def _within_window(
+    now: datetime, start_h: int, end_h: int, days: set[int]
+) -> bool:
+    if now.isoweekday() not in days:
+        return False
+    return start_h <= now.hour < end_h
+
+
+def _next_window_open(
+    now: datetime, start_h: int, end_h: int, days: set[int]
+) -> datetime:
+    cand = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+    for _ in range(24 * 14):
+        if _within_window(cand, start_h, end_h, days):
+            return cand
+        cand += timedelta(hours=1)
+    return now + timedelta(hours=1)
+
 
 def smtp_configured() -> bool:
     """True when a real (non-Mailhog) sending mailbox looks configured."""
@@ -130,6 +158,25 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
     if step.channel != "email":
         msg = None
     else:
+        # Respect the campaign sending window — if outside it, defer this
+        # enrollment to the next open slot instead of sending now.
+        now2 = datetime.now(timezone.utc)
+        days = _allowed_days(campaign.send_days)
+        if not _within_window(
+            now2,
+            campaign.send_window_start_hour,
+            campaign.send_window_end_hour,
+            days,
+        ):
+            enr.next_send_at = _next_window_open(
+                now2,
+                campaign.send_window_start_hour,
+                campaign.send_window_end_hour,
+                days,
+            )
+            await db.commit()
+            return None
+
         # A/B variants: the step itself is variant "A"; pick one per recipient.
         variants = await list_variants(db, step.id)
         options = [(step.subject, step.body_template)] + [
@@ -140,6 +187,10 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
         )
         subject = render_template(chosen_subject, lead)
         body = render_template(chosen_body, lead)
+        if campaign.include_unsubscribe:
+            footer = (campaign.unsubscribe_text or _DEFAULT_UNSUB).strip()
+            if footer:
+                body = f"{body}\n\n---\n{footer}"
 
         msg = Message(
             enrollment_id=enr.id,

@@ -1,6 +1,14 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -22,6 +30,22 @@ class Campaign(Base):
     scheduled_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Sending window (hours interpreted in UTC for MVP) + allowed weekdays
+    # (ISO 1=Mon..7=Sun, CSV). Emails only go out inside this window.
+    send_window_start_hour: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    send_window_end_hour: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="24"
+    )
+    send_days: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="1,2,3,4,5,6,7"
+    )
+    # Unsubscribe footer appended to outgoing emails.
+    include_unsubscribe: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    unsubscribe_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

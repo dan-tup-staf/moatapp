@@ -122,6 +122,11 @@ export type Campaign = {
   from_email: string;
   from_name: string | null;
   scheduled_at: string | null;
+  send_window_start_hour: number;
+  send_window_end_hour: number;
+  send_days: string;
+  include_unsubscribe: boolean;
+  unsubscribe_text: string | null;
   created_at: string;
   updated_at: string;
   steps_count: number;
@@ -137,6 +142,11 @@ export type CampaignCreate = {
 
 export type CampaignUpdate = Partial<CampaignCreate> & {
   status?: CampaignStatus;
+  send_window_start_hour?: number;
+  send_window_end_hour?: number;
+  send_days?: string;
+  include_unsubscribe?: boolean;
+  unsubscribe_text?: string | null;
 };
 
 export type StepChannel =

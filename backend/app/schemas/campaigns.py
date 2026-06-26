@@ -88,6 +88,11 @@ class CampaignUpdate(BaseModel):
     from_name: str | None = Field(default=None, max_length=255)
     status: CampaignStatus | None = None
     scheduled_at: datetime | None = None
+    send_window_start_hour: int | None = Field(default=None, ge=0, le=24)
+    send_window_end_hour: int | None = Field(default=None, ge=0, le=24)
+    send_days: str | None = Field(default=None, max_length=32)
+    include_unsubscribe: bool | None = None
+    unsubscribe_text: str | None = None
 
 
 class CampaignRead(BaseModel):
@@ -99,6 +104,11 @@ class CampaignRead(BaseModel):
     from_email: EmailStr
     from_name: str | None
     scheduled_at: datetime | None = None
+    send_window_start_hour: int = 0
+    send_window_end_hour: int = 24
+    send_days: str = "1,2,3,4,5,6,7"
+    include_unsubscribe: bool = False
+    unsubscribe_text: str | None = None
     created_at: datetime
     updated_at: datetime
     steps_count: int = 0
