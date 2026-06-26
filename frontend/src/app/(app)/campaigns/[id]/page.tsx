@@ -528,6 +528,85 @@ function localInputToIso(local: string): string | null {
   return new Date(local).toISOString();
 }
 
+const PRIORITIES: { value: string; label: string; desc: string }[] = [
+  {
+    value: "prioritise_followups",
+    label: "Follow-upy",
+    desc: "Najpierw dosyłaj kolejne kroki istniejącym odbiorcom.",
+  },
+  {
+    value: "prioritise_new",
+    label: "Nowi odbiorcy",
+    desc: "Najpierw kontaktuj się z nowymi prospektami.",
+  },
+  {
+    value: "balanced",
+    label: "Zrównoważony",
+    desc: "Równo rozkładaj wysyłkę między krokami.",
+  },
+  {
+    value: "aggressive",
+    label: "Agresywny",
+    desc: "Maksymalizuj dzienny wolumen w ramach limitów.",
+  },
+];
+
+function SettingsToggle({
+  checked,
+  onChange,
+  title,
+  desc,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  title: string;
+  desc: string;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start justify-between gap-4 py-2">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-gray-800">{title}</p>
+        <p className="mt-0.5 text-xs text-gray-500">{desc}</p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={
+          "relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition " +
+          (checked ? "bg-emerald-500" : "bg-gray-300")
+        }
+      >
+        <span
+          className={
+            "absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all " +
+            (checked ? "left-4" : "left-0.5")
+          }
+        />
+      </button>
+    </label>
+  );
+}
+
+function SettingsSection({
+  title,
+  desc,
+  children,
+}: {
+  title: string;
+  desc?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border border-gray-200 bg-white p-4">
+      <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+      {desc && <p className="mt-0.5 text-xs text-gray-500">{desc}</p>}
+      <div className="mt-3">{children}</div>
+    </section>
+  );
+}
+
 function SettingsPanel({
   campaign,
   onSaved,
@@ -554,6 +633,16 @@ function SettingsPanel({
   );
   const [unsubText, setUnsubText] = useState(campaign.unsubscribe_text ?? "");
   const [trackOpens, setTrackOpens] = useState(campaign.track_opens);
+  const [stopOnReply, setStopOnReply] = useState(campaign.stop_on_reply);
+  const [trackClicks, setTrackClicks] = useState(campaign.track_clicks);
+  const [textOnly, setTextOnly] = useState(campaign.text_only);
+  const [sameThread, setSameThread] = useState(campaign.same_thread);
+  const [cc, setCc] = useState(campaign.cc ?? "");
+  const [bcc, setBcc] = useState(campaign.bcc ?? "");
+  const [priority, setPriority] = useState(campaign.sending_priority);
+  const [dealValue, setDealValue] = useState<string>(
+    campaign.deal_value != null ? String(campaign.deal_value) : "",
+  );
   const [groupId, setGroupId] = useState<number | "">(campaign.group_id ?? "");
   const [groups, setGroups] = useState<CampaignGroup[]>([]);
   const [saving, setSaving] = useState(false);
@@ -590,6 +679,14 @@ function SettingsPanel({
         include_unsubscribe: includeUnsub,
         unsubscribe_text: unsubText || null,
         track_opens: trackOpens,
+        stop_on_reply: stopOnReply,
+        track_clicks: trackClicks,
+        text_only: textOnly,
+        same_thread: sameThread,
+        cc: cc.trim() || null,
+        bcc: bcc.trim() || null,
+        sending_priority: priority,
+        deal_value: dealValue.trim() === "" ? null : Number(dealValue),
         group_id: groupId === "" ? null : Number(groupId),
       });
       await onSaved();
@@ -602,13 +699,10 @@ function SettingsPanel({
   }
 
   return (
-    <form
-      onSubmit={handleSave}
-      className="space-y-3 rounded-lg border border-gray-200 bg-white p-4"
-    >
+    <form onSubmit={handleSave} className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-gray-700">
-          Ustawienia kampanii
+        <h3 className="text-base font-semibold text-gray-900">
+          Ustawienia sekwencji
         </h3>
         <button
           type="button"
@@ -618,195 +712,334 @@ function SettingsPanel({
           Zwiń
         </button>
       </div>
-      <input
-        type="text"
-        required
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Nazwa"
-        className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-      />
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <input
-          type="email"
-          required
-          value={fromEmail}
-          onChange={(e) => setFromEmail(e.target.value)}
-          placeholder="from email"
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-        />
-        <input
-          type="text"
-          value={fromName}
-          onChange={(e) => setFromName(e.target.value)}
-          placeholder="from name"
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <select
-        value={status}
-        onChange={(e) => setStatus(e.target.value as CampaignStatus)}
-        className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+
+      {/* Ogólne */}
+      <SettingsSection title="Ogólne">
+        <div className="space-y-3">
+          <input
+            type="text"
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Nazwa sekwencji"
+            className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          />
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
+                Status
+              </label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as CampaignStatus)}
+                className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              >
+                {STATUS_OPTIONS.map((s) => (
+                  <option key={s} value={s}>
+                    {STATUS_LABELS[s]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
+                Kampania (parasol)
+              </label>
+              <select
+                value={groupId}
+                onChange={(e) =>
+                  setGroupId(e.target.value === "" ? "" : Number(e.target.value))
+                }
+                className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="">— bez kampanii —</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      </SettingsSection>
+
+      {/* Konto wysyłkowe */}
+      <SettingsSection
+        title="Konto wysyłkowe"
+        desc="Adres, z którego wychodzą maile tej sekwencji. Rotacja wielu skrzynek — wkrótce."
       >
-        {STATUS_OPTIONS.map((s) => (
-          <option key={s} value={s}>
-            {STATUS_LABELS[s]}
-          </option>
-        ))}
-      </select>
-
-      <div>
-        <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
-          Kampania (parasol)
-        </label>
-        <select
-          value={groupId}
-          onChange={(e) =>
-            setGroupId(e.target.value === "" ? "" : Number(e.target.value))
-          }
-          className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-        >
-          <option value="">— bez kampanii —</option>
-          {groups.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
-          Zaplanuj start (data i godzina)
-        </label>
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            type="datetime-local"
-            value={scheduledLocal}
-            onChange={(e) => setScheduledLocal(e.target.value)}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-          />
-          {scheduledLocal && (
-            <button
-              type="button"
-              onClick={() => setScheduledLocal("")}
-              className="text-xs text-gray-500 hover:text-gray-900 underline"
-            >
-              Wyczyść (wysyłaj od razu)
-            </button>
-          )}
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
+              From email
+            </label>
+            <input
+              type="email"
+              required
+              value={fromEmail}
+              onChange={(e) => setFromEmail(e.target.value)}
+              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
+              From name
+            </label>
+            <input
+              type="text"
+              value={fromName}
+              onChange={(e) => setFromName(e.target.value)}
+              placeholder="np. Daniel z MOATION"
+              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
         </div>
-        <p className="mt-1 text-xs text-gray-500">
-          Puste = pierwszy krok rusza zaraz po zapisaniu leadów. Ustawiona
-          przyszła data = pierwszy krok poczeka do tego momentu (kolejne kroki
-          liczą się od niego wg opóźnień).
-        </p>
-      </div>
+      </SettingsSection>
 
-      {/* Okno wysyłki */}
-      <div className="space-y-2 border-t border-gray-200 pt-3">
-        <label className="block text-xs font-medium uppercase text-gray-500">
-          Okno wysyłki (czas UTC)
-        </label>
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-gray-600">od</span>
-          <input
-            type="number"
-            min={0}
-            max={24}
-            value={startHour}
-            onChange={(e) => setStartHour(Number(e.target.value))}
-            className="w-16 rounded-md border border-gray-300 px-2 py-1"
-          />
-          <span className="text-gray-600">do</span>
-          <input
-            type="number"
-            min={0}
-            max={24}
-            value={endHour}
-            onChange={(e) => setEndHour(Number(e.target.value))}
-            className="w-16 rounded-md border border-gray-300 px-2 py-1"
-          />
-          <span className="text-gray-400">godz.</span>
+      {/* Harmonogram wysyłki */}
+      <SettingsSection
+        title="Harmonogram wysyłki"
+        desc="Kiedy startuje sekwencja i w jakich godzinach/dniach wychodzą maile (UTC)."
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
+              Zaplanuj start (data i godzina)
+            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="datetime-local"
+                value={scheduledLocal}
+                onChange={(e) => setScheduledLocal(e.target.value)}
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+              />
+              {scheduledLocal && (
+                <button
+                  type="button"
+                  onClick={() => setScheduledLocal("")}
+                  className="text-xs text-gray-500 underline hover:text-gray-900"
+                >
+                  Wyczyść (wysyłaj od razu)
+                </button>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-gray-500">
+              Puste = pierwszy krok rusza zaraz po zapisaniu leadów. Przyszła data
+              = pierwszy krok czeka do tego momentu.
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
+              Okno wysyłki
+            </label>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-gray-600">od</span>
+              <input
+                type="number"
+                min={0}
+                max={24}
+                value={startHour}
+                onChange={(e) => setStartHour(Number(e.target.value))}
+                className="w-16 rounded-md border border-gray-300 px-2 py-1"
+              />
+              <span className="text-gray-600">do</span>
+              <input
+                type="number"
+                min={0}
+                max={24}
+                value={endHour}
+                onChange={(e) => setEndHour(Number(e.target.value))}
+                className="w-16 rounded-md border border-gray-300 px-2 py-1"
+              />
+              <span className="text-gray-400">godz.</span>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {DOW.map(([label, d]) => {
+                const on = days.has(d);
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => toggleDay(d)}
+                    className={
+                      "rounded-full border px-2.5 py-1 text-xs transition " +
+                      (on
+                        ? "border-gray-900 bg-gray-900 text-white"
+                        : "border-gray-300 bg-white text-gray-700 hover:border-gray-500")
+                    }
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {DOW.map(([label, d]) => {
-            const on = days.has(d);
+      </SettingsSection>
+
+      {/* Priorytet wysyłki */}
+      <SettingsSection
+        title="Priorytet wysyłki"
+        desc="Jak rozkładać dzienny limit między nowymi prospektami a follow-upami."
+      >
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {PRIORITIES.map((p) => {
+            const active = priority === p.value;
             return (
               <button
-                key={d}
+                key={p.value}
                 type="button"
-                onClick={() => toggleDay(d)}
+                onClick={() => setPriority(p.value)}
                 className={
-                  "rounded-full px-2.5 py-1 text-xs border transition " +
-                  (on
-                    ? "bg-gray-900 text-white border-gray-900"
-                    : "bg-white text-gray-700 border-gray-300 hover:border-gray-500")
+                  "rounded-lg border p-3 text-left transition " +
+                  (active
+                    ? "border-gray-900 ring-1 ring-gray-900/10"
+                    : "border-gray-200 hover:border-gray-400")
                 }
               >
-                {label}
+                <div className="flex items-center gap-2">
+                  <span
+                    className={
+                      "h-3.5 w-3.5 rounded-full border-2 " +
+                      (active ? "border-gray-900 bg-gray-900" : "border-gray-300")
+                    }
+                  />
+                  <span className="text-sm font-medium text-gray-900">
+                    {p.label}
+                  </span>
+                </div>
+                <p className="mt-1 pl-5 text-xs text-gray-500">{p.desc}</p>
               </button>
             );
           })}
         </div>
-        <p className="text-xs text-gray-500">
-          Maile wychodzą tylko w tych godzinach i dniach; poza oknem wysyłka
-          przesuwa się na najbliższy dozwolony moment. Domyślnie 0–24, wszystkie
-          dni = bez ograniczeń.
-        </p>
-      </div>
+      </SettingsSection>
+
+      {/* Bezpieczeństwo i śledzenie */}
+      <SettingsSection
+        title="Bezpieczeństwo i śledzenie"
+        desc="Zachowanie sekwencji i dostarczalność."
+      >
+        <div className="divide-y divide-gray-100">
+          <SettingsToggle
+            checked={stopOnReply}
+            onChange={setStopOnReply}
+            title="Zatrzymaj follow-upy po odpowiedzi"
+            desc="Gdy prospekt odpowie, nie wysyłaj kolejnych kroków. (działa z wykrywaniem odpowiedzi — IMAP wkrótce)"
+          />
+          <SettingsToggle
+            checked={trackOpens}
+            onChange={setTrackOpens}
+            title="Śledź otwarcia (pixel)"
+            desc="Pokazuje, kto otworzył maila. Wymaga wersji HTML — może lekko obniżyć dostarczalność."
+          />
+          <SettingsToggle
+            checked={trackClicks}
+            onChange={setTrackClicks}
+            title="Śledź kliknięcia linków"
+            desc="Przepisuje linki przez tracker. (przekierowania kliknięć — wkrótce)"
+          />
+          <SettingsToggle
+            checked={textOnly}
+            onChange={setTextOnly}
+            title="Wysyłaj tylko tekst (bez HTML)"
+            desc="Lepsza dostarczalność dla pierwszego maila. Wyłącza pixel otwarć."
+          />
+          <SettingsToggle
+            checked={sameThread}
+            onChange={setSameThread}
+            title="Wysyłaj w tym samym wątku"
+            desc="Kolejne kroki dosyłane jako odpowiedź w wątku pierwszego maila. (nagłówki References — wkrótce)"
+          />
+        </div>
+      </SettingsSection>
+
+      {/* Cc & Bcc */}
+      <SettingsSection
+        title="Cc i Bcc"
+        desc="Stałe adresy dodawane do każdego maila w sekwencji (oddziel przecinkami)."
+      >
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
+              Cc
+            </label>
+            <input
+              type="text"
+              value={cc}
+              onChange={(e) => setCc(e.target.value)}
+              placeholder="kopia@firma.pl, ktos@firma.pl"
+              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
+              Bcc
+            </label>
+            <input
+              type="text"
+              value={bcc}
+              onChange={(e) => setBcc(e.target.value)}
+              placeholder="crm@firma.pl"
+              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+      </SettingsSection>
+
+      {/* Wartość deala */}
+      <SettingsSection
+        title="Wartość deala"
+        desc="Szacowana wartość pojedynczego prospekta — zasila przychód pipeline'u (Interested/Meeting/Closed)."
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-500">PLN</span>
+          <input
+            type="number"
+            min={0}
+            value={dealValue}
+            onChange={(e) => setDealValue(e.target.value)}
+            placeholder="np. 5000"
+            className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm"
+          />
+        </div>
+      </SettingsSection>
 
       {/* Wypis */}
-      <div className="space-y-2 border-t border-gray-200 pt-3">
-        <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-          <input
-            type="checkbox"
+      <SettingsSection
+        title="Wypis (unsubscribe)"
+        desc="Stopka wymagana prawnie przy cold mailingu — poprawia też dostarczalność."
+      >
+        <div className="space-y-2">
+          <SettingsToggle
             checked={includeUnsub}
-            onChange={(e) => setIncludeUnsub(e.target.checked)}
-            className="h-4 w-4"
+            onChange={setIncludeUnsub}
+            title="Dołącz stopkę wypisu"
+            desc="Dopisywana na końcu każdego maila."
           />
-          Dołącz stopkę wypisu (unsubscribe)
-        </label>
-        {includeUnsub && (
-          <textarea
-            value={unsubText}
-            onChange={(e) => setUnsubText(e.target.value)}
-            rows={2}
-            placeholder="Jeśli nie chcesz otrzymywać kolejnych wiadomości, odpisz STOP."
-            className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-          />
-        )}
-        <p className="text-xs text-gray-500">
-          Dopisywana na końcu każdego maila. Poprawia dostarczalność i jest
-          wymagana prawnie przy cold mailingu.
-        </p>
-      </div>
-
-      {/* Śledzenie otwarć */}
-      <div className="space-y-2 border-t border-gray-200 pt-3">
-        <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-          <input
-            type="checkbox"
-            checked={trackOpens}
-            onChange={(e) => setTrackOpens(e.target.checked)}
-            className="h-4 w-4"
-          />
-          Śledź otwarcia maili (pixel)
-        </label>
-        <p className="text-xs text-gray-500">
-          Pokazuje, kto otworzył maila (kolumna „otwarcia"). Wymaga wersji HTML
-          maila — może lekko obniżyć dostarczalność. Działa po ustawieniu
-          TRACKING_BASE_URL na moation-api.
-        </p>
-      </div>
+          {includeUnsub && (
+            <textarea
+              value={unsubText}
+              onChange={(e) => setUnsubText(e.target.value)}
+              rows={2}
+              placeholder="Jeśli nie chcesz otrzymywać kolejnych wiadomości, odpisz STOP."
+              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+          )}
+        </div>
+      </SettingsSection>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <button
-        disabled={saving}
-        className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-      >
-        {saving ? "Zapisywanie..." : "Zapisz"}
-      </button>
+      <div className="sticky bottom-0 -mx-1 flex justify-end border-t border-gray-200 bg-gray-50/80 px-1 py-3 backdrop-blur">
+        <button
+          disabled={saving}
+          className="rounded-md bg-gray-900 px-5 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+        >
+          {saving ? "Zapisywanie..." : "Zapisz ustawienia"}
+        </button>
+      </div>
     </form>
   );
 }

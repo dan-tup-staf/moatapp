@@ -57,6 +57,29 @@ class Campaign(Base):
     track_opens: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
     )
+    # --- Saleshandy-style sequence settings ---
+    # Safety toggles
+    stop_on_reply: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true"
+    )
+    track_clicks: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    text_only: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    same_thread: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    # Constant Cc/Bcc (comma-separated) applied to every email in the sequence.
+    cc: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    bcc: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # prioritise_followups | prioritise_new | balanced | aggressive
+    sending_priority: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="balanced"
+    )
+    # Estimated deal value per prospect (used for pipeline revenue rollups).
+    deal_value: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

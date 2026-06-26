@@ -17,7 +17,7 @@ B2B SaaS do outreachu opartego o sygnały zakupowe (intent data). Stack:
 - Render: **`moation-api`** (backend) i **`moation-web`** (frontend). Deploy
   `moation-api` odpala `alembic upgrade head` (migracje w `backend/alembic/versions/`).
 - Po zmianach user robi „Deploy latest commit" (lub ma Auto-Deploy: Yes).
-- Migracje są addytywne (0008–0014). Najnowsza migracja: `0014`.
+- Migracje są addytywne (0008–0015). Najnowsza migracja: `0015`.
 
 ## Konta / dostęp
 - Login do appki: `daniel.tupczynski@staffly.pl`, hasło ustawione na `Moation2026!`
@@ -83,8 +83,15 @@ screenów** (karty, kolory, ikony lucide, ładne stany). Uwaga: ikony brandowe
    Score, Warm-up Status, Deliverability %, SPF/DKIM/DMARC/PTR), rotacja nadawców.
 3. **Domeny:** dopieszczenie wizualne (score ring, kolory).
 4. **Konto:** Użytkownicy+role (model org/zespół), Płatności (Stripe, plany, limity).
-5. **Settings sekwencji (pozostałe zakładki):** ESP Matching, Sending Schedule UI,
-   Sending Priority, Deal Value, Email Verification, Cc/Bcc, prawdziwy Unsubscribe.
+5. ✅ **Settings sekwencji 1:1 — ZROBIONE (sekcje Saleshandy).** `SettingsPanel`
+   w `campaigns/[id]/page.tsx`: sekcje Ogólne / Konto wysyłkowe / Harmonogram /
+   Priorytet wysyłki / Bezpieczeństwo i śledzenie (toggle'e) / Cc&Bcc / Wartość
+   deala / Wypis. Migracja `0015` (campaigns: stop_on_reply, track_clicks,
+   text_only, same_thread, cc, bcc, sending_priority, deal_value). Funkcjonalnie
+   wpięte już: **Cc/Bcc** i **text_only** (w `email_sender._send_via_smtp`).
+   TODO (persist jest, działanie później): stop_on_reply (po IMAP reply tracking),
+   track_clicks (po przepisywaniu linków), same_thread (nagłówki References),
+   sending_priority (kolejność w workerze), ESP Matching, Email Verification.
 6. **Subsequence** (rozgałęzienia warunkowe), **Sequence Score** realny scoring.
 7. **Reply tracking (IMAP)** → stop-on-reply + kolumna Replied. **Click tracking.**
 8. **Listy z filtrów** (audience builder → zapis listy) + **import CSV** +

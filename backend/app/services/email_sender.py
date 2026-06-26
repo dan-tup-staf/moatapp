@@ -77,6 +77,12 @@ def _to_html(body: str, pixel_url: str) -> str:
     )
 
 
+def _split_addrs(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    return [a.strip() for a in raw.replace(";", ",").split(",") if a.strip()]
+
+
 async def _send_via_smtp(
     *,
     to_email: str,
@@ -85,6 +91,8 @@ async def _send_via_smtp(
     subject: str,
     body: str,
     html: str | None = None,
+    cc: str | None = None,
+    bcc: str | None = None,
 ) -> None:
     # Prefer the authenticated mailbox address as the From — many providers
     # reject a From that doesn't match the logged-in account.
@@ -94,6 +102,10 @@ async def _send_via_smtp(
     msg = EmailMessage()
     msg["From"] = f"{actual_name} <{actual_from}>" if actual_name else actual_from
     msg["To"] = to_email
+    cc_list = _split_addrs(cc)
+    bcc_list = _split_addrs(bcc)
+    if cc_list:
+        msg["Cc"] = ", ".join(cc_list)
     msg["Subject"] = subject
     # Lightweight unsubscribe header (improves deliverability). Token-based
     # one-click handling is a later milestone.
@@ -102,8 +114,12 @@ async def _send_via_smtp(
     if html:
         msg.add_alternative(html, subtype="html")
 
+    # Bcc must not appear in headers — pass the full recipient list explicitly
+    # so aiosmtplib delivers to To + Cc + Bcc without leaking Bcc.
+    recipients = [to_email, *cc_list, *bcc_list]
     await aiosmtplib.send(
         msg,
+        recipients=recipients,
         hostname=settings.smtp_host,
         port=settings.smtp_port,
         username=settings.smtp_username or None,
@@ -225,7 +241,9 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
         await db.flush()  # assign msg.id for the tracking pixel
 
         html = None
-        if campaign.track_opens:
+        # "Send as text only" suppresses the HTML part (better deliverability);
+        # open tracking needs HTML, so text_only wins when both are set.
+        if campaign.track_opens and not campaign.text_only:
             pixel = open_pixel_url(msg.id)
             if pixel:
                 html = _to_html(body, pixel)
@@ -238,6 +256,8 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
                 subject=subject,
                 body=body,
                 html=html,
+                cc=campaign.cc,
+                bcc=campaign.bcc,
             )
             msg.sent_at = datetime.now(timezone.utc)
             msg.status = "sent"

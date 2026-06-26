@@ -107,6 +107,14 @@ class CampaignUpdate(BaseModel):
     include_unsubscribe: bool | None = None
     unsubscribe_text: str | None = None
     track_opens: bool | None = None
+    stop_on_reply: bool | None = None
+    track_clicks: bool | None = None
+    text_only: bool | None = None
+    same_thread: bool | None = None
+    cc: str | None = None
+    bcc: str | None = None
+    sending_priority: str | None = Field(default=None, max_length=32)
+    deal_value: int | None = Field(default=None, ge=0)
 
 
 class CampaignRead(BaseModel):
@@ -125,6 +133,14 @@ class CampaignRead(BaseModel):
     include_unsubscribe: bool = False
     unsubscribe_text: str | None = None
     track_opens: bool = False
+    stop_on_reply: bool = True
+    track_clicks: bool = False
+    text_only: bool = False
+    same_thread: bool = False
+    cc: str | None = None
+    bcc: str | None = None
+    sending_priority: str = "balanced"
+    deal_value: int | None = None
     created_at: datetime
     updated_at: datetime
     steps_count: int = 0

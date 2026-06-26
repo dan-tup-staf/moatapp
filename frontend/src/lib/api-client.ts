@@ -136,6 +136,14 @@ export type Campaign = {
   include_unsubscribe: boolean;
   unsubscribe_text: string | null;
   track_opens: boolean;
+  stop_on_reply: boolean;
+  track_clicks: boolean;
+  text_only: boolean;
+  same_thread: boolean;
+  cc: string | null;
+  bcc: string | null;
+  sending_priority: string;
+  deal_value: number | null;
   created_at: string;
   updated_at: string;
   steps_count: number;
@@ -159,6 +167,14 @@ export type CampaignUpdate = Partial<CampaignCreate> & {
   include_unsubscribe?: boolean;
   unsubscribe_text?: string | null;
   track_opens?: boolean;
+  stop_on_reply?: boolean;
+  track_clicks?: boolean;
+  text_only?: boolean;
+  same_thread?: boolean;
+  cc?: string | null;
+  bcc?: string | null;
+  sending_priority?: string;
+  deal_value?: number | null;
 };
 
 export type StepChannel =
