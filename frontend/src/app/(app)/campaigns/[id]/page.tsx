@@ -34,12 +34,16 @@ import {
   StepStats,
   StepVariant,
 } from "@/lib/api-client";
+import { StepsTab } from "@/components/sequence-steps";
 
 const CHANNEL_LABELS: Record<StepChannel, string> = {
   email: "Email",
   linkedin_visit: "LinkedIn — wejście na profil",
   linkedin_invite: "LinkedIn — zaproszenie",
   linkedin_message: "LinkedIn — wiadomość",
+  call: "Telefon",
+  whatsapp: "WhatsApp",
+  task: "Zadanie",
 };
 
 const CHANNEL_BADGES: Record<StepChannel, { icon: string; label: string; cls: string }> = {
@@ -63,6 +67,9 @@ const CHANNEL_BADGES: Record<StepChannel, { icon: string; label: string; cls: st
     label: "LI · wiadomość",
     cls: "bg-sky-100 text-sky-800",
   },
+  call: { icon: "📞", label: "Telefon", cls: "bg-emerald-100 text-emerald-800" },
+  whatsapp: { icon: "🟢", label: "WhatsApp", cls: "bg-green-100 text-green-800" },
+  task: { icon: "✅", label: "Zadanie", cls: "bg-amber-100 text-amber-800" },
 };
 
 const STATUS_OPTIONS: CampaignStatus[] = [
@@ -416,74 +423,13 @@ export default function CampaignDetailPage() {
 
       {/* TAB: Kroki */}
       {tab === "kroki" && (
-      <section className="rounded-xl border border-gray-200 bg-white">
-        <div className="border-b border-gray-200 p-4">
-          <h3 className="text-sm font-medium text-gray-700">Sekwencja kroków</h3>
-        </div>
-        <div className="overflow-x-auto p-4">
-          <div className="flex min-w-min items-stretch gap-3">
-            {steps.length === 0 && (
-              <p className="py-2 text-sm text-gray-500">
-                Brak stepów — dodaj pierwszy po prawej.
-              </p>
-            )}
-            {steps.map((step, i) => {
-              const day =
-                1 +
-                steps
-                  .slice(1, i + 1)
-                  .reduce((a, s) => a + s.delay_days, 0);
-              return (
-                <div key={step.id} className="flex items-center gap-3">
-                  <div className="flex flex-col items-center gap-1">
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
-                      Dzień {day}
-                    </span>
-                    <StepCardCompact
-                      step={step}
-                      stats={statsByStepId.get(step.id) ?? null}
-                      active={selectedStepId === step.id}
-                      isFirst={i === 0}
-                      onClick={() => setSelectedStepId(step.id)}
-                    />
-                  </div>
-                  {i < steps.length - 1 && (
-                    <span className="text-xl text-gray-300">→</span>
-                  )}
-                </div>
-              );
-            })}
-            {steps.length > 0 && (
-              <span className="text-xl text-gray-300">→</span>
-            )}
-            <AddStepButton
-              campaignId={campaignId}
-              nextOrder={steps.length}
-              onCreated={async (newId) => {
-                await refresh();
-                setSelectedStepId(newId);
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Step editor */}
-        {selectedStep && (
-          <div className="border-t border-gray-200 p-4">
-            <StepEditor
-              key={selectedStep.id}
-              step={selectedStep}
-              campaignId={campaignId}
-              stats={statsByStepId.get(selectedStep.id) ?? null}
-              onSaved={refresh}
-              onDeleted={async () => {
-                setSelectedStepId(null);
-                await refresh();
-              }}
-            />
-          </div>
-        )}
-      </section>
+        <StepsTab
+          campaignId={campaignId}
+          campaign={campaign}
+          steps={steps}
+          statsByStepId={statsByStepId}
+          refresh={refresh}
+        />
       )}
 
       {/* TAB: Odbiorcy */}

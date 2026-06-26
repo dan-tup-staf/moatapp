@@ -16,6 +16,9 @@ class StepChannel(str, Enum):
     LINKEDIN_VISIT = "linkedin_visit"
     LINKEDIN_INVITE = "linkedin_invite"
     LINKEDIN_MESSAGE = "linkedin_message"
+    CALL = "call"
+    WHATSAPP = "whatsapp"
+    TASK = "task"
 
 
 class EnrollmentStatus(str, Enum):

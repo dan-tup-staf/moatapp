@@ -165,7 +165,10 @@ export type StepChannel =
   | "email"
   | "linkedin_visit"
   | "linkedin_invite"
-  | "linkedin_message";
+  | "linkedin_message"
+  | "call"
+  | "whatsapp"
+  | "task";
 
 export type SequenceStep = {
   id: number;
