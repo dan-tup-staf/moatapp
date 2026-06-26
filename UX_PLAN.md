@@ -98,6 +98,50 @@ oraz reguły progów.
 - **Milestone 4 (opcjonalnie) — auto-zakładanie skrzynek/domen:** Google
   Workspace/Microsoft + rejestrator DNS; wymaga stałych kosztów.
 
+## Rozbudowa lewego panelu — Infrastruktura e-mail + Konto (do zrobienia)
+
+Docelowy układ sidebara (dwie nowe grupy):
+
+```
+🏠 Zacznij tu
+STRATEGIA        · ICP · Źródła sygnałów
+POZYSKIWANIE     · Sygnały · Firmy · Osoby · Listy
+ZAANGAŻOWANIE    · Kampanie
+INFRASTRUKTURA   · Domeny · Rozgrzewanie · Dostarczalność   ← NOWA grupa (pod Kampaniami)
+ANALIZA          · Dashboard
+─────────────────────────────────────
+KONTO            · Użytkownicy i dostępy · Płatności i plan   ← NOWA grupa (sam dół)
+🔌 Integracje / CRM
+👤 konto · Wyloguj
+```
+
+### Grupa „INFRASTRUKTURA" (pod ZAANGAŻOWANIE/Kampanie)
+
+- **Domeny** — podłączanie domeny wysyłkowej i zarządzanie wieloma domenami:
+  weryfikacja DNS (SPF/DKIM/DMARC) ze statusem ✓/✗, lista domen, dodawanie/
+  usuwanie, przypisanie skrzynek do domen. (łączy się z Milestone 2–3 e-mail).
+- **Rozgrzewanie** — panel rozgrzewania skrzynek: status warmupu, ramp wysyłek,
+  wynik „reputacji". Start: odesłanie/integracja z gotowym rozgrzewaczem
+  (Mailreach/Instantly) zamiast własnej sieci (zgodnie z roadmapą e-mail).
+- **Dostarczalność** — zdrowie skrzynek i statystyki: % dostarczeń, bounce
+  rate, spam rate, open/reply, placement test (inbox vs spam), per-skrzynka.
+
+> Backend pod to powstaje etapami w roadmapie e-mail (Milestone 1.5–3):
+> wiele skrzynek, DNS, warmup, bounce/deliverability.
+
+### Grupa „KONTO" (sam dół panelu) — typowy B2B SaaS
+
+- **Użytkownicy i dostępy** — zapraszanie userów, role/uprawnienia (owner /
+  admin / member), zarządzanie dostępem, usuwanie.
+- **Płatności i plan** — plan i funkcje (co włączone/wyłączone, feature flags
+  per plan), formy płatności (karta), faktury (historia + pobieranie), zużycie
+  kredytów/limity (AI, wysyłki), upgrade/downgrade. Integracja billingowa
+  (np. Stripe) do ustalenia.
+
+> To wymaga: modeli organizacji/zespołu + ról, modelu subskrypcji/planu,
+> integracji płatności, oraz egzekwowania limitów (kredyty AI / wysyłki).
+> Duży obszar — robimy etapami, zaczynając od użytkowników i ról.
+
 ## Otwarte pytania do ustalenia później
 - Z jakim CRM integrujemy w pierwszej kolejności?
 - Progi tieringu: automatyczne (po score) czy ręcznie definiowane przez usera?

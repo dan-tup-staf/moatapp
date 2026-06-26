@@ -8,6 +8,9 @@ import {
   Building2,
   ChevronsLeft,
   ChevronsRight,
+  CreditCard,
+  Flame,
+  Globe,
   LayoutDashboard,
   List,
   LogOut,
@@ -16,7 +19,9 @@ import {
   Radar,
   Rocket,
   Send,
+  ShieldCheck,
   Target,
+  UserCog,
   Users,
 } from "lucide-react";
 
@@ -48,10 +53,26 @@ const NAV_GROUPS: NavGroup[] = [
     items: [{ href: "/campaigns", label: "Kampanie", icon: Send }],
   },
   {
+    title: "Infrastruktura",
+    items: [
+      { href: "/domains", label: "Domeny", icon: Globe },
+      { href: "/warmup", label: "Rozgrzewanie", icon: Flame },
+      { href: "/deliverability", label: "Dostarczalność", icon: ShieldCheck },
+    ],
+  },
+  {
     title: "Analiza",
     items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }],
   },
 ];
+
+const ACCOUNT_GROUP: NavGroup = {
+  title: "Konto",
+  items: [
+    { href: "/account/users", label: "Użytkownicy i dostępy", icon: UserCog },
+    { href: "/account/billing", label: "Płatności i plan", icon: CreditCard },
+  ],
+};
 
 const BOTTOM_ITEMS: NavItem[] = [
   { href: "/integrations", label: "Integracje / CRM", icon: Plug },
@@ -147,8 +168,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
 
-        {/* Bottom: integrations + account */}
+        {/* Bottom: account group + integrations + logout */}
         <div className="space-y-1 border-t border-gray-200 px-2 py-3">
+          {ACCOUNT_GROUP.title && !collapsed && (
+            <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+              {ACCOUNT_GROUP.title}
+            </p>
+          )}
+          {ACCOUNT_GROUP.items.map((item) => (
+            <NavLink key={item.href} item={item} />
+          ))}
           {BOTTOM_ITEMS.map((item) => (
             <NavLink key={item.href} item={item} />
           ))}
