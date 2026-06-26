@@ -142,14 +142,24 @@ def _unwrap_json(text: str) -> str:
     return span.group(1) if span else stripped
 
 
+def _coerce_list(data):
+    """Models in JSON mode sometimes wrap the array in an object
+    ({"pytania": [...]}). Unwrap to the first list value we find."""
+    if isinstance(data, dict):
+        for v in data.values():
+            if isinstance(v, list):
+                return v
+    return data
+
+
 def _parse_json_list(text: str, what: str) -> list[str]:
     try:
-        data = json.loads(_unwrap_json(text))
+        data = _coerce_list(json.loads(_unwrap_json(text)))
         if not isinstance(data, list):
             raise ValueError(f"oczekiwano listy, dostałem {type(data).__name__}")
         return [str(x).strip() for x in data if str(x).strip()]
     except (json.JSONDecodeError, ValueError) as e:
-        logger.exception("Claude zwrócił niepoprawny JSON dla %s: %s", what, text)
+        logger.exception("AI zwrócił niepoprawny JSON dla %s: %s", what, text)
         raise RuntimeError(f"AI zwrócił niepoprawny format dla {what}") from e
 
 
@@ -278,7 +288,7 @@ async def suggest_signal_sources(icp: IcpProfile) -> list[dict]:
 
 def _parse_json_list_of_dicts(text: str) -> list[dict]:
     try:
-        data = json.loads(_unwrap_json(text))
+        data = _coerce_list(json.loads(_unwrap_json(text)))
     except json.JSONDecodeError as e:
         logger.exception("suggest_signal_sources: niepoprawny JSON: %s", text[:300])
         raise RuntimeError("AI zwrócił niepoprawny format propozycji") from e

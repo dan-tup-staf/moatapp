@@ -36,7 +36,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: "Strategia",
     items: [
-      { href: "/icp", label: "ICP", icon: Target },
+      { href: "/icp", label: "Profil klienta", icon: Target },
       { href: "/signal-sources", label: "Źródła sygnałów", icon: Radar },
     ],
   },
