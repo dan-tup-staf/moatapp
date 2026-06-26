@@ -3,6 +3,16 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ListOrdered,
+  Pause,
+  Play,
+  Send as SendIcon,
+  Settings2,
+  Users2,
+} from "lucide-react";
 
 import {
   api,
@@ -76,6 +86,79 @@ const STATUS_LABELS: Record<CampaignStatus, string> = {
   archived: "Archiwum",
 };
 
+type TabKey = "kroki" | "odbiorcy" | "ustawienia";
+
+function SeqScoreBadge({ score }: { score: number }) {
+  const color =
+    score >= 80
+      ? "text-emerald-600"
+      : score >= 50
+        ? "text-amber-500"
+        : "text-gray-400";
+  const ring =
+    score >= 80
+      ? "#10b981"
+      : score >= 50
+        ? "#f59e0b"
+        : "#9ca3af";
+  return (
+    <div
+      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full"
+      style={{
+        background: `conic-gradient(${ring} ${score * 3.6}deg, #e5e7eb 0deg)`,
+      }}
+      title="Sequence Score — jakość sekwencji"
+    >
+      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white">
+        <span className={`text-sm font-bold ${color}`}>{score}</span>
+      </div>
+    </div>
+  );
+}
+
+function SeqTabs({
+  tab,
+  onChange,
+  done,
+}: {
+  tab: TabKey;
+  onChange: (t: TabKey) => void;
+  done: { kroki: boolean; odbiorcy: boolean };
+}) {
+  const items: { key: TabKey; label: string; icon: typeof ListOrdered }[] = [
+    { key: "kroki", label: "Kroki", icon: ListOrdered },
+    { key: "odbiorcy", label: "Odbiorcy", icon: Users2 },
+    { key: "ustawienia", label: "Ustawienia", icon: Settings2 },
+  ];
+  return (
+    <div className="flex gap-1 border-b border-gray-200">
+      {items.map(({ key, label, icon: Icon }) => {
+        const active = tab === key;
+        const isDone = key === "kroki" ? done.kroki : key === "odbiorcy" ? done.odbiorcy : false;
+        return (
+          <button
+            key={key}
+            onClick={() => onChange(key)}
+            className={
+              "flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors " +
+              (active
+                ? "border-gray-900 text-gray-900"
+                : "border-transparent text-gray-500 hover:text-gray-900")
+            }
+          >
+            {isDone ? (
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+            ) : (
+              <Icon className="h-4 w-4" />
+            )}
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function CampaignDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -89,8 +172,7 @@ export default function CampaignDetailPage() {
   const [loading, setLoading] = useState(true);
 
   const [selectedStepId, setSelectedStepId] = useState<number | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showEnrollments, setShowEnrollments] = useState(false);
+  const [tab, setTab] = useState<TabKey>("kroki");
   const [showPipeline, setShowPipeline] = useState(false);
 
   // Send-due state
@@ -199,6 +281,19 @@ export default function CampaignDetailPage() {
     [steps, selectedStepId],
   );
 
+  const seqScore = useMemo(() => {
+    if (!campaign) return 0;
+    let s = 30;
+    if (steps.length >= 1) s += 15;
+    if (steps.length >= 3) s += 15;
+    const text = steps.map((x) => `${x.subject} ${x.body_template}`).join(" ");
+    if (/\{\{/.test(text)) s += 15;
+    if (/\{spin/i.test(text)) s += 10;
+    if (campaign.include_unsubscribe) s += 10;
+    if (campaign.track_opens) s += 5;
+    return Math.min(100, s);
+  }, [steps, campaign]);
+
   if (loading) return <p className="text-sm text-gray-500">Ładowanie...</p>;
   if (!campaign) return null;
 
@@ -207,63 +302,76 @@ export default function CampaignDetailPage() {
     campaign.status === "active" || campaign.status === "paused";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
-      <div>
+      <div className="space-y-4">
         <Link
           href="/campaigns"
-          className="text-sm text-gray-500 hover:underline"
+          className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900"
         >
-          ← Wszystkie kampanie
+          <ArrowLeft className="h-3.5 w-3.5" /> Sekwencje
         </Link>
-        <div className="mt-1 flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h2 className="truncate text-2xl font-bold tracking-tight">
-                {campaign.name}
-              </h2>
-              <span
-                className={`rounded-full px-2 py-0.5 text-xs ${statusStyle}`}
-              >
-                {STATUS_LABELS[campaign.status]}
-              </span>
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <SeqScoreBadge score={seqScore} />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="truncate text-2xl font-bold tracking-tight">
+                  {campaign.name}
+                </h2>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs ${statusStyle}`}
+                >
+                  {STATUS_LABELS[campaign.status]}
+                </span>
+              </div>
+              <p className="mt-0.5 text-sm text-gray-500">
+                {campaign.from_name
+                  ? `${campaign.from_name} <${campaign.from_email}>`
+                  : campaign.from_email}
+              </p>
             </div>
-            <p className="mt-1 text-sm text-gray-500">
-              {campaign.from_name
-                ? `${campaign.from_name} <${campaign.from_email}>`
-                : campaign.from_email}
-            </p>
           </div>
-          <div className="flex shrink-0 gap-2">
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              onClick={handleSendDueNow}
+              disabled={sending || enrollments.length === 0}
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-100 disabled:opacity-50"
+            >
+              <SendIcon className="h-3.5 w-3.5" />
+              {sending ? "Wysyłam…" : "Wyślij należne"}
+            </button>
             {canToggle && (
               <button
                 onClick={handleStatusToggle}
-                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-100"
+                className={
+                  "inline-flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium text-white " +
+                  (campaign.status === "active"
+                    ? "bg-amber-500 hover:bg-amber-600"
+                    : "bg-emerald-600 hover:bg-emerald-700")
+                }
               >
-                {campaign.status === "active" ? "⏸ Pauza" : "▶ Aktywuj"}
+                {campaign.status === "active" ? (
+                  <>
+                    <Pause className="h-3.5 w-3.5" /> Pauza
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-3.5 w-3.5" /> Uruchom sekwencję
+                  </>
+                )}
               </button>
             )}
-            <button
-              onClick={() => setShowSettings(!showSettings)}
-              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-100"
-            >
-              Ustawienia
-            </button>
           </div>
         </div>
 
         {/* Stat strip */}
         {stats && (
-          <div className="mt-4 grid grid-cols-2 gap-3 rounded-lg border border-gray-200 bg-white p-3 sm:grid-cols-4 md:grid-cols-6">
-            <MiniStat label="Stepów" value={steps.length} />
-            <MiniStat
-              label="Enrollmentów"
-              value={stats.enrollments.total}
-            />
-            <MiniStat
-              label="Aktywnych"
-              value={stats.enrollments.active}
-            />
+          <div className="grid grid-cols-2 gap-3 rounded-xl border border-gray-200 bg-white p-3 sm:grid-cols-4 md:grid-cols-6">
+            <MiniStat label="Kroków" value={steps.length} />
+            <MiniStat label="Odbiorców" value={stats.enrollments.total} />
+            <MiniStat label="Aktywnych" value={stats.enrollments.active} />
             <MiniStat
               label="Ukończonych"
               value={stats.enrollments.completed}
@@ -280,30 +388,37 @@ export default function CampaignDetailPage() {
             />
           </div>
         )}
+
+        <SeqTabs
+          tab={tab}
+          onChange={setTab}
+          done={{
+            kroki: steps.length > 0,
+            odbiorcy: enrollments.length > 0,
+          }}
+        />
       </div>
 
-      {/* Pipeline kampanii (collapsible, opt-in) */}
-      {stats && stats.enrollments.total > 0 && (
-        <CampaignPipelineSection
-          stages={stats.pipeline}
-          open={showPipeline}
-          onToggle={() => setShowPipeline(!showPipeline)}
-        />
+      {sendMsg && (
+        <p className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-700">
+          {sendMsg}
+        </p>
       )}
 
-      {/* Settings panel (collapsible) */}
-      {showSettings && (
+      {/* TAB: Ustawienia */}
+      {tab === "ustawienia" && (
         <SettingsPanel
           campaign={campaign}
           onSaved={refresh}
-          onClose={() => setShowSettings(false)}
+          onClose={() => setTab("kroki")}
         />
       )}
 
-      {/* Steps timeline */}
-      <section className="rounded-lg border border-gray-200 bg-white">
+      {/* TAB: Kroki */}
+      {tab === "kroki" && (
+      <section className="rounded-xl border border-gray-200 bg-white">
         <div className="border-b border-gray-200 p-4">
-          <h3 className="text-sm font-medium text-gray-700">Sekwencja</h3>
+          <h3 className="text-sm font-medium text-gray-700">Sekwencja kroków</h3>
         </div>
         <div className="overflow-x-auto p-4">
           <div className="flex min-w-min items-stretch gap-3">
@@ -369,23 +484,27 @@ export default function CampaignDetailPage() {
           </div>
         )}
       </section>
+      )}
 
-      {/* Enrollments */}
-      <section className="rounded-lg border border-gray-200 bg-white">
-        <button
-          onClick={() => setShowEnrollments(!showEnrollments)}
-          className="flex w-full items-center justify-between border-b border-gray-200 p-4 text-left hover:bg-gray-50"
-        >
-          <h3 className="text-sm font-medium text-gray-700">
-            Enrollment leadów{" "}
-            <span className="text-xs font-normal text-gray-500">
-              ({enrollments.length})
-            </span>
-          </h3>
-          <span className="text-gray-400">{showEnrollments ? "▾" : "▸"}</span>
-        </button>
-
-        {showEnrollments && (
+      {/* TAB: Odbiorcy */}
+      {tab === "odbiorcy" && (
+        <div className="space-y-5">
+          {stats && stats.enrollments.total > 0 && (
+            <CampaignPipelineSection
+              stages={stats.pipeline}
+              open={showPipeline}
+              onToggle={() => setShowPipeline(!showPipeline)}
+            />
+          )}
+          <section className="rounded-xl border border-gray-200 bg-white">
+            <div className="border-b border-gray-200 p-4">
+              <h3 className="text-sm font-medium text-gray-700">
+                Odbiorcy{" "}
+                <span className="text-xs font-normal text-gray-500">
+                  ({enrollments.length})
+                </span>
+              </h3>
+            </div>
           <div className="space-y-3 p-4">
             <div className="flex flex-wrap items-center gap-3">
               <button
@@ -493,16 +612,16 @@ export default function CampaignDetailPage() {
               </div>
             )}
           </div>
-        )}
-      </section>
+          </section>
 
-      {/* Preview */}
-      {steps.length > 0 && enrollments.length > 0 && (
-        <PreviewSection
-          campaignId={campaignId}
-          steps={steps}
-          enrollments={enrollments}
-        />
+          {steps.length > 0 && enrollments.length > 0 && (
+            <PreviewSection
+              campaignId={campaignId}
+              steps={steps}
+              enrollments={enrollments}
+            />
+          )}
+        </div>
       )}
     </div>
   );
