@@ -2,23 +2,70 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import {
+  Bell,
+  Building2,
+  ChevronsLeft,
+  ChevronsRight,
+  LayoutDashboard,
+  List,
+  LogOut,
+  type LucideIcon,
+  Plug,
+  Radar,
+  Rocket,
+  Send,
+  Target,
+  Users,
+} from "lucide-react";
 
 import { useAuth } from "@/contexts/auth-context";
 
-const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/lists", label: "Listy" },
-  { href: "/campaigns", label: "Kampanie" },
-  { href: "/signals", label: "Sygnały" },
-  { href: "/signal-sources", label: "Źródła" },
-  { href: "/integrations", label: "Integracje" },
+type NavItem = { href: string; label: string; icon: LucideIcon };
+type NavGroup = { title?: string; items: NavItem[] };
+
+const NAV_GROUPS: NavGroup[] = [
+  { items: [{ href: "/start", label: "Zacznij tu", icon: Rocket }] },
+  {
+    title: "Strategia",
+    items: [
+      { href: "/icp", label: "ICP", icon: Target },
+      { href: "/signal-sources", label: "Źródła sygnałów", icon: Radar },
+    ],
+  },
+  {
+    title: "Pozyskiwanie",
+    items: [
+      { href: "/signals", label: "Sygnały", icon: Bell },
+      { href: "/companies", label: "Firmy", icon: Building2 },
+      { href: "/people", label: "Osoby", icon: Users },
+      { href: "/lists", label: "Listy", icon: List },
+    ],
+  },
+  {
+    title: "Zaangażowanie",
+    items: [{ href: "/campaigns", label: "Kampanie", icon: Send }],
+  },
+  {
+    title: "Analiza",
+    items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }],
+  },
 ];
+
+const BOTTOM_ITEMS: NavItem[] = [
+  { href: "/integrations", label: "Integracje / CRM", icon: Plug },
+];
+
+function isActive(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(href + "/");
+}
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { user, loading, logout } = useAuth();
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -34,47 +81,102 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
+  function NavLink({ item }: { item: NavItem }) {
+    const active = isActive(pathname, item.href);
+    const Icon = item.icon;
+    return (
+      <Link
+        href={item.href}
+        title={collapsed ? item.label : undefined}
+        className={
+          "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors " +
+          (collapsed ? "justify-center " : "") +
+          (active
+            ? "bg-gray-100 text-gray-900"
+            : "text-gray-500 hover:bg-gray-50 hover:text-gray-900")
+        }
+      >
+        <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={active ? 2.4 : 2} />
+        {!collapsed && <span className="truncate">{item.label}</span>}
+      </Link>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
-          <h1 className="text-lg font-bold tracking-tight">MOATION</h1>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-600">{user.email}</span>
+    <div className="flex min-h-screen bg-gray-50">
+      <aside
+        className={
+          "sticky top-0 flex h-screen shrink-0 flex-col border-r border-gray-200 bg-white transition-[width] duration-200 " +
+          (collapsed ? "w-16" : "w-60")
+        }
+      >
+        {/* Brand + collapse */}
+        <div className="flex h-14 items-center justify-between border-b border-gray-200 px-3">
+          {!collapsed && (
+            <span className="text-lg font-bold tracking-tight">MOATION</span>
+          )}
+          <button
+            onClick={() => setCollapsed((c) => !c)}
+            title={collapsed ? "Rozwiń panel" : "Zwiń panel"}
+            className={
+              "rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 " +
+              (collapsed ? "mx-auto" : "")
+            }
+          >
+            {collapsed ? (
+              <ChevronsRight className="h-4 w-4" />
+            ) : (
+              <ChevronsLeft className="h-4 w-4" />
+            )}
+          </button>
+        </div>
+
+        {/* Nav groups */}
+        <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-4">
+          {NAV_GROUPS.map((group, gi) => (
+            <div key={gi} className="space-y-1">
+              {group.title && !collapsed && (
+                <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                  {group.title}
+                </p>
+              )}
+              {group.items.map((item) => (
+                <NavLink key={item.href} item={item} />
+              ))}
+            </div>
+          ))}
+        </nav>
+
+        {/* Bottom: integrations + account */}
+        <div className="space-y-1 border-t border-gray-200 px-2 py-3">
+          {BOTTOM_ITEMS.map((item) => (
+            <NavLink key={item.href} item={item} />
+          ))}
+          <div
+            className={
+              "mt-1 flex items-center gap-2 rounded-md px-3 py-2 " +
+              (collapsed ? "justify-center" : "")
+            }
+          >
+            {!collapsed && (
+              <span className="min-w-0 flex-1 truncate text-xs text-gray-500">
+                {user.email}
+              </span>
+            )}
             <button
               onClick={logout}
-              className="rounded-md border border-gray-300 px-3 py-1 text-sm hover:bg-gray-100"
+              title="Wyloguj"
+              className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
             >
-              Wyloguj
+              <LogOut className="h-4 w-4" />
             </button>
           </div>
         </div>
-      </header>
+      </aside>
 
-      <nav className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-6xl gap-1 px-6">
-          {NAV_ITEMS.map((item) => {
-            const active =
-              pathname === item.href || pathname.startsWith(item.href + "/");
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={
-                  "border-b-2 px-3 py-2 text-sm font-medium transition-colors " +
-                  (active
-                    ? "border-gray-900 text-gray-900"
-                    : "border-transparent text-gray-500 hover:text-gray-900")
-                }
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
-
-      <main className="mx-auto max-w-6xl p-6">{children}</main>
+      <main className="min-w-0 flex-1">
+        <div className="mx-auto max-w-6xl p-6">{children}</div>
+      </main>
     </div>
   );
 }

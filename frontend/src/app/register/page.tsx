@@ -25,7 +25,7 @@ export default function RegisterPage() {
       // Auto-login po rejestracji
       const { access_token } = await api.login({ email, password });
       await login(access_token);
-      router.push("/dashboard");
+      router.push("/start");
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : "Błąd rejestracji");
     } finally {
