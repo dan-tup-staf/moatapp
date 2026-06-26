@@ -1041,6 +1041,18 @@ function StepEditor({
         }
         className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
       />
+      <p className="text-xs text-gray-400">
+        Personalizacja: <code className="rounded bg-gray-100 px-1">{"{{first_name}}"}</code>{" "}
+        <code className="rounded bg-gray-100 px-1">{"{{company}}"}</code>{" "}
+        <code className="rounded bg-gray-100 px-1">{"{{title}}"}</code>. Spintax
+        (warianty słów):{" "}
+        <code className="rounded bg-gray-100 px-1">
+          {"{spin Cześć|Hej|Dzień dobry endspin}"}
+        </code>{" "}
+        — każdy odbiorca dostaje losowy, ale stały wariant (lepsza
+        dostarczalność).
+      </p>
+
       <div className="flex items-center gap-2">
         <label className="text-sm text-gray-700">Delay (dni):</label>
         <input

@@ -1,3 +1,5 @@
+import hashlib
+import re
 from datetime import datetime, timezone
 
 from sqlalchemy import case, func, select, update
@@ -699,9 +701,28 @@ async def _campaign_pipeline_buckets(
     return result
 
 
+_SPIN_RE = re.compile(r"\{spin\s+(.*?)\s+endspin\}", re.IGNORECASE | re.DOTALL)
+
+
+def _expand_spintax(template: str, seed: str) -> str:
+    """Expand {spin A|B|C endspin} blocks. The chosen option is deterministic
+    per recipient (seeded by their email + the block), so the same prospect
+    always gets the same wording across previews/sends — important for threads."""
+
+    def pick(m: "re.Match[str]") -> str:
+        options = [o.strip() for o in m.group(1).split("|")]
+        options = [o for o in options if o] or [""]
+        digest = hashlib.md5(f"{seed}|{m.group(1)}".encode("utf-8")).hexdigest()
+        return options[int(digest, 16) % len(options)]
+
+    return _SPIN_RE.sub(pick, template)
+
+
 def render_template(template: str, lead: Lead) -> str:
-    """Simple {{var}} substitution for prospecting templates. Unknown variables
-    are left as-is so users can spot mistakes in preview."""
+    """Render a prospecting template: expand {spin ...|... endspin} blocks, then
+    do {{var}} substitution. Unknown variables are left as-is so users can spot
+    mistakes in preview."""
+    result = _expand_spintax(template, lead.email or "")
     variables = {
         "first_name": lead.first_name or "",
         "last_name": lead.last_name or "",
@@ -709,7 +730,6 @@ def render_template(template: str, lead: Lead) -> str:
         "title": lead.title or "",
         "email": lead.email,
     }
-    result = template
     for k, v in variables.items():
         result = result.replace("{{" + k + "}}", v)
     return result
