@@ -162,6 +162,73 @@ W zakładce **Listy** dodać kreator listy z trzech źródeł:
 > Zakres: kreator „Nowa lista" z zakładkami [Z sygnałów] [CSV] [Integracje],
 > reużywając audience-filtrów i istniejącego importu CSV.
 
+## Kampanie → podsekcja „Sekwencje" (jak Saleshandy) — do zrobienia
+
+Pełny builder sekwencji z górnymi krokami: **Steps · Prospects · Settings ·
+Subsequence**, „Sequence Score" i „Start Sequence". Sporo już mamy w
+`campaigns/[id]` — poniżej co rozbudować.
+
+### Steps (mamy oś + Day labels; do dodania)
+- **Warianty A/B** per krok: „Create variant" (ręcznie) + **„Generate AI
+  variant"** (Gemini tworzy alternatywną treść). Rotacja wariantów przy wysyłce.
+- **Spintax** `{spin|opcja1|opcja2}` — losowanie fraz w jednym mailu
+  (deliverability). Parser przy renderze + podgląd „rozwiniętej" wersji.
+- **Statystyki per krok**: Sent / Opened / Replied (mamy sent/failed — dodać
+  open/reply tracking: pixel otwarcia + wykrywanie odpowiedzi).
+- **Typy kroków z menu „+ Add Step"**: Email (jest), LinkedIn Automation,
+  LinkedIn Manual Task, Call, WhatsApp, Task. (LinkedIn/Call/WhatsApp jako
+  zadania manualne na start — wysyłkę robi user; mamy już kanały LinkedIn.)
+- **„Sending as same thread"** — kolejne kroki w tym samym wątku mailowym
+  (In-Reply-To/References headers).
+
+### Prospects
+- Lista odbiorców sekwencji — mamy **audience builder** (filtry/tier/źródła).
+  Do dopięcia jako osobna zakładka + statusy weryfikacji maila.
+- **Pasek statusów (klikane liczniki/filtry)**: Total · Not Contacted ·
+  Contacted · Opened · Replied · Clicked · Interested · Meeting Booked ·
+  Closed · Out of Office (z kwotami $ przy Interested/Meeting/Closed dzięki
+  Deal Value).
+- **Kolumny wiersza**: Name + email (z ikoną weryfikacji), Current Step,
+  Current step stats (wysłane/otwarte/kliknięte/odpowiedź — ikony), **Outcome**
+  (dropdown: Interested / Meeting Booked / Closed / Not interested…), Tags,
+  Last activity.
+- **Toolbar masowy**: search, filtr, wyślij teraz, taguj, usuń z sekwencji,
+  przenieś, blacklist, flaga, pauza/wznów, eksport CSV.
+- **Aktywny/Inactive** per prospect + ręczne sterowanie.
+
+### Settings (zakładki — nowe)
+- **Email Account** — wybór skrzynki + **rotacja nadawców** (2+ skrzynki =
+  rozkładanie wysyłki). Tabela: Sender Email, Tags, Signature (View),
+  Active Sequence, Daily Limit (np. 15/15), Setup Score (np. 97/100), Owner.
+  Dodawanie kolejnych skrzynek. (Łączy się z sekcją Domeny/Skrzynki.)
+- **ESP Matching** — toggle „automatycznie dopasuj ESP nadawcy do ESP
+  odbiorcy" + tabela: Microsoft / Google Workspace / Other → konta, limit,
+  liczba prospektów.
+- **Sending Schedule** — wybór harmonogramu (Default / własny): okna godzinowe,
+  dni tygodnia, strefa czasowa (mamy datę startu — dodać harmonogram dzienny).
+- **Safety Settings** — toggle'e: „Stop follow-ups gdy przyjdzie odpowiedź",
+  „Track email opens", „Track link clicks", „Remove styling automatically",
+  „Send emails as text only" (tylko pierwszy mail — recommended). Plus limity
+  dzienne/odstępy (mamy dzienny limit).
+- **Sending Priority** — Prioritise Follow-Ups / New Prospects / Balanced /
+  Aggressive (rozkład wysyłek między krokami).
+- **Deal Value** — szacowana wartość deala per prospect → pipeline revenue.
+- **Email Verification** — weryfikacja adresów, toggle „wysyłaj do ryzykownych".
+- **Cc & Bcc** — stałe Cc/Bcc dla całej sekwencji.
+- **Unsubscribe** — tekst vs link, szablony wiadomości, nagłówek List-Unsubscribe
+  (mamy nagłówek — dodać UI + stronę wypisu z tokenem).
+
+### Subsequence
+- Rozgałęzienia warunkowe (np. „jeśli otworzył → ścieżka A, jeśli nie → B").
+
+### Sequence Score
+- Ocena jakości sekwencji (liczba kroków, personalizacja, spam words, długość) —
+  mamy Content Guide w planie composer'a; tu agregacja na całą sekwencję.
+
+> Kolejność realizacji: (1) warianty + spintax + open/reply tracking,
+> (2) zakładki Settings (Schedule, Priority, Cc/Bcc, Unsubscribe, Verification),
+> (3) typy kroków multi-channel, (4) Subsequence, (5) Sequence Score.
+
 ## Otwarte pytania do ustalenia później
 - Z jakim CRM integrujemy w pierwszej kolejności?
 - Progi tieringu: automatyczne (po score) czy ręcznie definiowane przez usera?
