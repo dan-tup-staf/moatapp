@@ -142,6 +142,26 @@ KONTO            · Użytkownicy i dostępy · Płatności i plan   ← NOWA gru
 > integracji płatności, oraz egzekwowania limitów (kredyty AI / wysyłki).
 > Duży obszar — robimy etapami, zaczynając od użytkowników i ról.
 
+## Listy — budowanie z filtrów + import (do zrobienia)
+
+W zakładce **Listy** dodać kreator listy z trzech źródeł:
+
+- **Z sekcji Sygnały / Źródła — klikane filtry.** Budowanie listy przez
+  klikalne filtry (jak audience builder w kampaniach): wybór źródeł sygnałów,
+  fraza w tytule sygnału, tier 1/2/3, min. siła sygnału, zakres dat → podgląd
+  pasujących firm/osób → „Zapisz jako listę". (Backend ma już zbliżoną logikę
+  w `audience/preview` — do uogólnienia na zapis listy.)
+- **Import z CSV.** Wgrywanie pliku CSV z leadami (mapowanie kolumn: email,
+  imię, firma, stanowisko…). Endpoint importu już istnieje
+  (`/lists/{id}/leads/import`) — dodać UI kreatora i mapowanie.
+- **Integracje (jak na screenie Saleshandy).** Lista metod importu: LinkedIn
+  Search / Sales Navigator / Recruiter / Event / Post reactors, Import z CSV,
+  HubSpot itd. Na start: CSV realnie + reszta jako „coming soon" wpięte w
+  istniejący system integracji.
+
+> Zakres: kreator „Nowa lista" z zakładkami [Z sygnałów] [CSV] [Integracje],
+> reużywając audience-filtrów i istniejącego importu CSV.
+
 ## Otwarte pytania do ustalenia później
 - Z jakim CRM integrujemy w pierwszej kolejności?
 - Progi tieringu: automatyczne (po score) czy ręcznie definiowane przez usera?

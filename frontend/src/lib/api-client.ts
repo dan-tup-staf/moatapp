@@ -42,6 +42,22 @@ export type TestEmailResult = {
   detail: string | null;
 };
 
+export type Domain = {
+  id: number;
+  domain: string;
+  created_at: string;
+};
+
+export type DomainCheck = { ok: boolean; detail: string };
+
+export type DomainHealth = {
+  domain: string;
+  checks: Record<string, DomainCheck>;
+  score: number;
+  max_score: number;
+  healthy: boolean;
+};
+
 export type LeadList = {
   id: number;
   name: string;
@@ -536,6 +552,23 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ to: to ?? null }),
       }),
+  },
+
+  // Domains (deliverability health)
+  domains: {
+    list: () => authed<Domain[]>("/domains"),
+    create: (domain: string) =>
+      authed<Domain>("/domains", {
+        method: "POST",
+        body: JSON.stringify({ domain }),
+      }),
+    delete: (id: number) =>
+      authed<void>(`/domains/${id}`, { method: "DELETE" }),
+    health: (id: number) => authed<DomainHealth>(`/domains/${id}/health`),
+    check: (domain: string) =>
+      authed<DomainHealth>(
+        `/domains/check?domain=${encodeURIComponent(domain)}`,
+      ),
   },
 
   // Lists

@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     # Shared secret guarding /api/v1/tick. Empty = endpoint disabled.
     cron_secret: str = ""
 
+    # DNS-over-HTTPS endpoint for domain health checks (SPF/DKIM/DMARC/MX).
+    doh_url: str = "https://dns.google/resolve"
+
     jwt_secret: str = "change-me-in-prod"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24
