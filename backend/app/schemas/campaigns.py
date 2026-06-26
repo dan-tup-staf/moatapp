@@ -178,6 +178,17 @@ class PreviewResponse(BaseModel):
     body: str
 
 
+class StepTestSendRequest(BaseModel):
+    to: str | None = None
+    lead_id: int | None = None
+
+
+class StepTestSendResult(BaseModel):
+    ok: bool
+    sent_to: str
+    subject: str
+
+
 # ---------- Campaign stats ----------
 
 

@@ -660,6 +660,12 @@ export const api = {
         method: "DELETE",
       }),
 
+    testSendStep: (campaignId: number, stepId: number, to?: string) =>
+      authed<{ ok: boolean; sent_to: string; subject: string }>(
+        `/campaigns/${campaignId}/steps/${stepId}/test-send`,
+        { method: "POST", body: JSON.stringify({ to: to ?? null }) },
+      ),
+
     // Enrollments
     listEnrollments: (campaignId: number) =>
       authed<Enrollment[]>(`/campaigns/${campaignId}/enrollments`),

@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db
 from app.deps import get_current_user
 from app.models.lead import Lead
+from app.models.lead_list import LeadList
 from app.models.user import User
 from app.schemas.campaigns import (
     AudienceCriteria,
@@ -21,10 +24,12 @@ from app.schemas.campaigns import (
     PreviewResponse,
     StepCreate,
     StepRead,
+    StepTestSendRequest,
+    StepTestSendResult,
     StepUpdate,
 )
 from app.services import campaigns as svc
-from app.services.email_sender import process_due_enrollments
+from app.services.email_sender import _send_via_smtp, process_due_enrollments
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
@@ -171,6 +176,71 @@ async def delete_step(
     if obj is None:
         raise HTTPException(status_code=404, detail="Step not found")
     await svc.delete_step(db, obj)
+
+
+@router.post(
+    "/{campaign_id}/steps/{step_id}/test-send",
+    response_model=StepTestSendResult,
+)
+async def test_send_step(
+    campaign_id: int,
+    step_id: int,
+    payload: StepTestSendRequest,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> StepTestSendResult:
+    """Render this step (with a sample or chosen lead) and send it as a test
+    email to the given address (defaults to the logged-in user)."""
+    campaign = await svc.get_campaign(db, current.id, campaign_id)
+    if campaign is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    step = await svc.get_step(db, campaign_id, step_id)
+    if step is None:
+        raise HTTPException(status_code=404, detail="Step not found")
+    if step.channel != "email":
+        raise HTTPException(
+            status_code=400,
+            detail="Test można wysłać tylko dla kroku typu Email",
+        )
+
+    to = (payload.to or current.email).strip()
+    if not to:
+        raise HTTPException(status_code=400, detail="Brak adresu docelowego")
+
+    lead = None
+    if payload.lead_id is not None:
+        res = await db.execute(
+            select(Lead)
+            .join(LeadList, LeadList.id == Lead.list_id)
+            .where(Lead.id == payload.lead_id, LeadList.user_id == current.id)
+        )
+        lead = res.scalar_one_or_none()
+    if lead is None:
+        # Sample data so merge tags render in the preview/test.
+        lead = SimpleNamespace(
+            email=to,
+            first_name="Jan",
+            last_name="Kowalski",
+            company="Przykładowa firma",
+            title="Dyrektor",
+        )
+
+    subject = svc.render_template(step.subject, lead)
+    body = svc.render_template(step.body_template, lead)
+    try:
+        await _send_via_smtp(
+            to_email=to,
+            from_email=campaign.from_email,
+            from_name=campaign.from_name,
+            subject=f"[TEST] {subject}",
+            body=body,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Wysyłka testowa nie powiodła się: {type(e).__name__}: {e}",
+        )
+    return StepTestSendResult(ok=True, sent_to=to, subject=subject)
 
 
 # ---------- Enrollments ----------

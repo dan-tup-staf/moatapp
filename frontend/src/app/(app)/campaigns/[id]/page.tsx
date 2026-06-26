@@ -902,6 +902,35 @@ function StepEditor({
   const [delay, setDelay] = useState(step.delay_days);
   const [saving, setSaving] = useState(false);
 
+  const [testTo, setTestTo] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(
+    null,
+  );
+
+  async function handleTestSend() {
+    setTesting(true);
+    setTestMsg(null);
+    try {
+      const r = await api.campaigns.testSendStep(
+        campaignId,
+        step.id,
+        testTo || undefined,
+      );
+      setTestMsg({
+        ok: true,
+        text: `Wysłano test na ${r.sent_to}. Sprawdź skrzynkę (także spam).`,
+      });
+    } catch (err) {
+      setTestMsg({
+        ok: false,
+        text: err instanceof ApiError ? err.detail : "Błąd wysyłki testu",
+      });
+    } finally {
+      setTesting(false);
+    }
+  }
+
   async function handleSave(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -939,6 +968,7 @@ function StepEditor({
   const isEmail = channel === "email";
 
   return (
+    <div className="space-y-4">
     <form onSubmit={handleSave} className="space-y-3">
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-medium text-gray-700">
@@ -1030,6 +1060,49 @@ function StepEditor({
         {saving ? "Zapisywanie..." : dirty ? "Zapisz zmiany" : "Bez zmian"}
       </button>
     </form>
+
+    {isEmail && (
+      <div className="space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3">
+        <p className="text-xs font-medium uppercase text-gray-500">
+          Wyślij testowy mail
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="email"
+            value={testTo}
+            onChange={(e) => setTestTo(e.target.value)}
+            placeholder="Adres testowy (domyślnie Twoje konto)"
+            className="min-w-[220px] flex-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+          />
+          <button
+            type="button"
+            onClick={handleTestSend}
+            disabled={testing}
+            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-100 disabled:opacity-50"
+          >
+            {testing ? "Wysyłam…" : "Wyślij test"}
+          </button>
+        </div>
+        {testMsg && (
+          <p
+            className={
+              "rounded-md px-3 py-2 text-sm " +
+              (testMsg.ok
+                ? "bg-emerald-50 text-emerald-800"
+                : "bg-red-50 text-red-700")
+            }
+          >
+            {testMsg.text}
+          </p>
+        )}
+        <p className="text-xs text-gray-400">
+          Renderuje ten krok na przykładowych danych (np. {"{{first_name}}"} →
+          Jan) i wysyła z Twojej skrzynki. Wymaga skonfigurowanego SMTP
+          (Integracje).
+        </p>
+      </div>
+    )}
+    </div>
   );
 }
 
