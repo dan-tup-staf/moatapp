@@ -25,6 +25,25 @@ class SynthesizeRequest(BaseModel):
     qa: list[QAPair] = Field(default_factory=list)
 
 
+class CompanyProfile(BaseModel):
+    """Profile of the ideal client company."""
+
+    employees: str = ""
+    industry: str = ""
+    recruitments_per_year: str = ""
+    hr_employees: str = ""
+
+
+class Persona(BaseModel):
+    """A member of the buying committee."""
+
+    title: str = ""
+    pain_points: list[str] = Field(default_factory=list)
+    gain_points: list[str] = Field(default_factory=list)
+    personal_goals: list[str] = Field(default_factory=list)
+    professional_goals: list[str] = Field(default_factory=list)
+
+
 class IcpFields(BaseModel):
     """Editable ICP fields. All optional — user fills what they know."""
 
@@ -34,6 +53,9 @@ class IcpFields(BaseModel):
     pain_points: list[str] = Field(default_factory=list)
     triggers: list[str] = Field(default_factory=list)
     notes: str = ""
+    # Rich client profile — company details + buying committee personas.
+    company: CompanyProfile = Field(default_factory=CompanyProfile)
+    personas: list[Persona] = Field(default_factory=list)
 
 
 class IcpProfileRead(BaseModel):

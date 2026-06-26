@@ -455,6 +455,21 @@ export type PipelineView = {
 
 // ---------- ICP ----------
 
+export type CompanyProfile = {
+  employees: string;
+  industry: string;
+  recruitments_per_year: string;
+  hr_employees: string;
+};
+
+export type Persona = {
+  title: string;
+  pain_points: string[];
+  gain_points: string[];
+  personal_goals: string[];
+  professional_goals: string[];
+};
+
 export type IcpFields = {
   target_industries: string[];
   company_size: string;
@@ -462,6 +477,8 @@ export type IcpFields = {
   pain_points: string[];
   triggers: string[];
   notes: string;
+  company: CompanyProfile;
+  personas: Persona[];
 };
 
 export type IcpQA = { question: string; answer: string };

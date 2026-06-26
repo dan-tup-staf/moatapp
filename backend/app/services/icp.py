@@ -101,19 +101,34 @@ async def synthesize_icp(
         f"Q: {p.question}\nA: {p.answer}" for p in qa if p.answer.strip()
     )
     prompt = (
-        "Na podstawie opisu firmy i odpowiedzi founderów stwórz "
-        "Ideal Customer Profile (ICP). Zwróć TYLKO poprawny JSON "
-        "ze schematem:\n"
+        "Na podstawie opisu firmy i odpowiedzi founderów stwórz bogaty profil "
+        "idealnego klienta (ICP). Zwróć TYLKO poprawny JSON ze schematem:\n"
         "{\n"
-        '  "target_industries": [string, string, ...],\n'
+        '  "target_industries": [string, ...],\n'
         '  "company_size": string (np. "50-500 pracowników"),\n'
-        '  "buyer_persona_titles": [string, string, ...],\n'
-        '  "pain_points": [string, string, ...],\n'
-        '  "triggers": [string, string, ...] (sygnały kupowe, np. '
-        '"rekrutacja HR managera"),\n'
-        '  "notes": string (krótkie dodatkowe wskazówki)\n'
+        '  "buyer_persona_titles": [string, ...],\n'
+        '  "pain_points": [string, ...],\n'
+        '  "triggers": [string, ...] (sygnały kupowe),\n'
+        '  "notes": string,\n'
+        '  "company": {\n'
+        '    "employees": string (przedział, np. "50-500"),\n'
+        '    "industry": string (główna branża),\n'
+        '    "recruitments_per_year": string (szac. liczba rekrutacji/rok),\n'
+        '    "hr_employees": string (szac. liczba osób w dziale HR)\n'
+        "  },\n"
+        '  "personas": [   // CAŁY komitet zakupowy: 3-5 person\n'
+        "    {\n"
+        '      "title": string (stanowisko, np. "Dyrektor HR"),\n'
+        '      "pain_points": [string, ...],     // bóle tej osoby\n'
+        '      "gain_points": [string, ...],     // korzyści/zyski\n'
+        '      "personal_goals": [string, ...],  // cele osobiste\n'
+        '      "professional_goals": [string, ...] // cele zawodowe\n'
+        "    }\n"
+        "  ]\n"
         "}\n\n"
-        "Każda lista 3-6 elementów, konkretne, bez ogólników.\n\n"
+        "Komitet zakupowy = różne role (decydent, użytkownik, budżet, "
+        "techniczny, blokujący). Listy płaskich pól: 3-6 elementów; listy w "
+        "personach: 2-4 elementy. Konkretnie, bez ogólników, po polsku.\n\n"
         f"OPIS FIRMY:\n{scraped[:3000]}\n\n"
         f"PYTANIA I ODPOWIEDZI:\n{qa_block or '(brak)'}"
     )
@@ -283,6 +298,34 @@ async def suggest_signal_sources(icp: IcpProfile) -> list[dict]:
                 "max_results": 15,
             }
         )
+    return out
+
+
+def merge_tags(icp_fields: dict | None) -> dict[str, str]:
+    """Flatten an ICP profile into {{merge_tag}} -> value pairs for email copy.
+    Tags: firma_pracownicy/branza/rekrutacje/hr and
+    persona_<N>_stanowisko / _pain_<M> / _gain_<M> / _cel_osobisty_<M> /
+    _cel_zawodowy_<M>."""
+    out: dict[str, str] = {}
+    if not icp_fields:
+        return out
+    company = icp_fields.get("company") or {}
+    out["firma_pracownicy"] = str(company.get("employees") or "")
+    out["firma_branza"] = str(company.get("industry") or "")
+    out["firma_rekrutacje"] = str(company.get("recruitments_per_year") or "")
+    out["firma_hr"] = str(company.get("hr_employees") or "")
+    for i, p in enumerate(icp_fields.get("personas") or [], start=1):
+        if not isinstance(p, dict):
+            continue
+        out[f"persona_{i}_stanowisko"] = str(p.get("title") or "")
+        for key, tag in (
+            ("pain_points", "pain"),
+            ("gain_points", "gain"),
+            ("personal_goals", "cel_osobisty"),
+            ("professional_goals", "cel_zawodowy"),
+        ):
+            for j, x in enumerate(p.get(key) or [], start=1):
+                out[f"persona_{i}_{tag}_{j}"] = str(x)
     return out
 
 

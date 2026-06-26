@@ -31,6 +31,7 @@ from app.schemas.campaigns import (
     VariantRead,
 )
 from app.services import campaigns as svc
+from app.services import icp as icp_svc
 from app.services.email_sender import _send_via_smtp, process_due_enrollments
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
@@ -234,8 +235,10 @@ async def test_send_step(
             title="Dyrektor",
         )
 
-    subject = svc.render_template(step.subject, lead)
-    body = svc.render_template(step.body_template, lead)
+    icp = await icp_svc.get_or_none(db, current.id)
+    extra = icp_svc.merge_tags(icp.icp_fields if icp else None)
+    subject = svc.render_template(step.subject, lead, extra)
+    body = svc.render_template(step.body_template, lead, extra)
     try:
         await _send_via_smtp(
             to_email=to,
@@ -462,7 +465,9 @@ async def preview_step(
     if lead is None:
         raise HTTPException(status_code=404, detail="Lead not found")
 
+    icp = await icp_svc.get_or_none(db, current.id)
+    extra = icp_svc.merge_tags(icp.icp_fields if icp else None)
     return PreviewResponse(
-        subject=svc.render_template(step.subject, lead),
-        body=svc.render_template(step.body_template, lead),
+        subject=svc.render_template(step.subject, lead, extra),
+        body=svc.render_template(step.body_template, lead, extra),
     )

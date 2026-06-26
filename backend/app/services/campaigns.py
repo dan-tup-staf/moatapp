@@ -725,10 +725,13 @@ def _expand_spintax(template: str, seed: str) -> str:
     return _SPIN_RE.sub(pick, template)
 
 
-def render_template(template: str, lead: Lead) -> str:
+def render_template(
+    template: str, lead: Lead, extra: dict[str, str] | None = None
+) -> str:
     """Render a prospecting template: expand {spin ...|... endspin} blocks, then
-    do {{var}} substitution. Unknown variables are left as-is so users can spot
-    mistakes in preview."""
+    do {{var}} substitution. `extra` adds profile merge-tags (firma_*, persona_*)
+    on top of the lead fields. Unknown variables are left as-is so users can
+    spot mistakes in preview."""
     result = _expand_spintax(template, lead.email or "")
     variables = {
         "first_name": lead.first_name or "",
@@ -737,6 +740,8 @@ def render_template(template: str, lead: Lead) -> str:
         "title": lead.title or "",
         "email": lead.email,
     }
+    if extra:
+        variables.update(extra)
     for k, v in variables.items():
         result = result.replace("{{" + k + "}}", v)
     return result

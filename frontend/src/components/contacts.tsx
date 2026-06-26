@@ -14,6 +14,7 @@ import {
   SourceType,
   SuggestedSource,
 } from "@/lib/api-client";
+import { ClientProfileView } from "@/components/client-profile";
 
 // ---------- Listy panel ----------
 
@@ -735,6 +736,7 @@ export function IcpPanel() {
             regenerating={synthesizing}
             qa={qa}
           />
+          <ClientProfileView fields={icp!.icp_fields} />
           <DiscoveryPanel />
         </>
       )}

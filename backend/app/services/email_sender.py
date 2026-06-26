@@ -25,6 +25,8 @@ from app.models.lead import Lead
 from app.models.message import Message
 from app.models.sequence_step import SequenceStep
 from app.services.campaigns import list_variants, pick_variant, render_template
+from app.services.icp import get_or_none as _get_icp
+from app.services.icp import merge_tags as _icp_merge_tags
 from app.services.tracking import open_pixel_url
 
 logger = logging.getLogger(__name__)
@@ -201,8 +203,10 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
         chosen_subject, chosen_body = pick_variant(
             options, f"{lead.email}|{step.id}"
         )
-        subject = render_template(chosen_subject, lead)
-        body = render_template(chosen_body, lead)
+        icp = await _get_icp(db, campaign.user_id)
+        extra = _icp_merge_tags(icp.icp_fields if icp else None)
+        subject = render_template(chosen_subject, lead, extra)
+        body = render_template(chosen_body, lead, extra)
         if campaign.include_unsubscribe:
             footer = (campaign.unsubscribe_text or _DEFAULT_UNSUB).strip()
             if footer:
