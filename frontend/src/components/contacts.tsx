@@ -509,7 +509,11 @@ export function IcpPanel() {
       const fresh = await api.icp.get();
       setIcp(fresh);
     } catch (err) {
-      const msg = err instanceof ApiError ? err.detail : "Błąd analizy";
+      const msg = err instanceof ApiError
+        ? err.detail
+        : `Nie udało się połączyć z API (możliwe uśpienie serwera lub przekroczony czas — analiza AI bywa wolna; spróbuj jeszcze raz za chwilę). Szczegóły: ${
+            err instanceof Error ? err.message : String(err)
+          }`;
       setError(msg);
       // 400 = scraping failed → automatycznie zasugeruj ręczny opis
       if (

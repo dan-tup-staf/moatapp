@@ -54,6 +54,13 @@ services:
         sync: false # nazwa nadawcy (np. Daniel z Staffly)
       - key: SMTP_DAILY_LIMIT
         value: "50" # dzienny limit bezpieczeństwa (0 = bez limitu)
+      # --- Scheduler (auto-wysyłka należnych maili) ---
+      - key: SCHEDULER_ENABLED
+        value: "true" # wbudowany tick co minutę (działa, gdy serwis nie śpi)
+      - key: SCHEDULER_RUN_SIGNALS
+        value: "false" # auto-scraping sygnałów (zużywa limit AI) — domyślnie off
+      - key: CRON_SECRET
+        sync: false # sekret do POST /api/v1/tick (dla darmowego zewnętrznego crona)
       - key: JWT_SECRET
         generateValue: true
       - key: CORS_ALLOW_ALL

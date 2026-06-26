@@ -64,6 +64,7 @@ class CampaignCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     from_email: EmailStr
     from_name: str | None = Field(default=None, max_length=255)
+    scheduled_at: datetime | None = None
 
 
 class CampaignUpdate(BaseModel):
@@ -71,6 +72,7 @@ class CampaignUpdate(BaseModel):
     from_email: EmailStr | None = None
     from_name: str | None = Field(default=None, max_length=255)
     status: CampaignStatus | None = None
+    scheduled_at: datetime | None = None
 
 
 class CampaignRead(BaseModel):
@@ -81,6 +83,7 @@ class CampaignRead(BaseModel):
     status: CampaignStatus
     from_email: EmailStr
     from_name: str | None
+    scheduled_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
     steps_count: int = 0

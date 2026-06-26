@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,11 +29,51 @@ async def create_campaign(
         name=payload.name,
         from_email=payload.from_email,
         from_name=payload.from_name,
+        scheduled_at=payload.scheduled_at,
     )
     db.add(obj)
     await db.commit()
     await db.refresh(obj)
     return obj
+
+
+def _normalize_aware(dt: datetime | None) -> datetime | None:
+    """Treat naive datetimes (e.g. from older rows) as UTC for safe compares."""
+    if dt is None:
+        return None
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
+async def _initial_send_at(
+    db: AsyncSession, campaign_id: int, now: datetime
+) -> datetime:
+    """First-step send time for a new enrollment: the campaign's scheduled_at
+    if it lies in the future, otherwise now (send asap)."""
+    res = await db.execute(
+        select(Campaign.scheduled_at).where(Campaign.id == campaign_id)
+    )
+    sched = _normalize_aware(res.scalar_one_or_none())
+    if sched is not None and sched > now:
+        return sched
+    return now
+
+
+async def apply_scheduled_start(db: AsyncSession, campaign: Campaign) -> None:
+    """If the campaign has a future scheduled_at, align step-0 active
+    enrollments to fire then (so changing the schedule after enrolling works)."""
+    sched = _normalize_aware(campaign.scheduled_at)
+    if sched is None or sched <= datetime.now(timezone.utc):
+        return
+    await db.execute(
+        update(CampaignEnrollment)
+        .where(
+            CampaignEnrollment.campaign_id == campaign.id,
+            CampaignEnrollment.current_step == 0,
+            CampaignEnrollment.status == "active",
+        )
+        .values(next_send_at=sched)
+    )
+    await db.commit()
 
 
 async def list_campaigns_with_counts(
@@ -106,6 +146,9 @@ async def update_campaign(
     for k, v in data.items():
         setattr(campaign, k, v)
     await db.commit()
+    await db.refresh(campaign)
+    # Keep already-enrolled step-0 leads aligned with the (possibly new) schedule.
+    await apply_scheduled_start(db, campaign)
     await db.refresh(campaign)
     return campaign
 
@@ -394,12 +437,13 @@ async def enroll_leads(
     enrolled = 0
     skipped = 0
     now = datetime.now(timezone.utc)
+    send_at = await _initial_send_at(db, campaign_id, now)
     for lid in valid_ids:
         obj = CampaignEnrollment(
             campaign_id=campaign_id,
             lead_id=lid,
             current_step=0,
-            next_send_at=now,
+            next_send_at=send_at,
             status="active",
         )
         db.add(obj)
@@ -433,12 +477,13 @@ async def enroll_from_list(
     enrolled = 0
     skipped = 0
     now = datetime.now(timezone.utc)
+    send_at = await _initial_send_at(db, campaign_id, now)
     for lid in lead_ids:
         obj = CampaignEnrollment(
             campaign_id=campaign_id,
             lead_id=lid,
             current_step=0,
-            next_send_at=now,
+            next_send_at=send_at,
             status="active",
         )
         db.add(obj)

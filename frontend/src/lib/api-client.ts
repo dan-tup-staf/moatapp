@@ -105,6 +105,7 @@ export type Campaign = {
   status: CampaignStatus;
   from_email: string;
   from_name: string | null;
+  scheduled_at: string | null;
   created_at: string;
   updated_at: string;
   steps_count: number;
@@ -115,6 +116,7 @@ export type CampaignCreate = {
   name: string;
   from_email: string;
   from_name?: string;
+  scheduled_at?: string | null;
 };
 
 export type CampaignUpdate = Partial<CampaignCreate> & {

@@ -36,6 +36,7 @@ def _to_campaign_read(c, steps_count: int, enrollments_count: int) -> CampaignRe
         status=c.status,
         from_email=c.from_email,
         from_name=c.from_name,
+        scheduled_at=c.scheduled_at,
         created_at=c.created_at,
         updated_at=c.updated_at,
         steps_count=steps_count,

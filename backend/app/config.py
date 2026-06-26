@@ -26,6 +26,19 @@ class Settings(BaseSettings):
     # / cold-start protection). 0 = unlimited.
     smtp_daily_limit: int = 50
 
+    # In-process scheduler: when enabled, the API itself ticks on an interval to
+    # send due campaign emails (and optionally run signal scrapers). On free
+    # hosting the service sleeps when idle, so also expose /api/v1/tick for an
+    # external cron to drive it reliably (see cron_secret).
+    scheduler_enabled: bool = True
+    scheduler_interval_seconds: int = 60
+    # Auto-run signal scrapers from the scheduler (uses AI quota for web
+    # channels) — off by default; trigger manually or via /tick?signals=true.
+    scheduler_run_signals: bool = False
+    signal_interval_seconds: int = 900
+    # Shared secret guarding /api/v1/tick. Empty = endpoint disabled.
+    cron_secret: str = ""
+
     jwt_secret: str = "change-me-in-prod"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24

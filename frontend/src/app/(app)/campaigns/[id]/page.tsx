@@ -152,8 +152,8 @@ export default function CampaignDetailPage() {
       const r = await api.campaigns.sendDueNow(campaignId);
       setSendMsg(
         r.processed > 0
-          ? `Wysłano ${r.processed} maili (zobacz Mailhog :8025)`
-          : "Brak enrollmentów gotowych do wysyłki (next_send_at > now())",
+          ? `Wysłano ${r.processed} maili.`
+          : "Brak leadów gotowych do wysyłki w tym momencie (następna wysyłka zaplanowana później).",
       );
       await refresh();
     } catch (err) {
@@ -310,20 +310,32 @@ export default function CampaignDetailPage() {
                 Brak stepów — dodaj pierwszy po prawej.
               </p>
             )}
-            {steps.map((step, i) => (
-              <div key={step.id} className="flex items-center gap-3">
-                <StepCardCompact
-                  step={step}
-                  stats={statsByStepId.get(step.id) ?? null}
-                  active={selectedStepId === step.id}
-                  isFirst={i === 0}
-                  onClick={() => setSelectedStepId(step.id)}
-                />
-                {i < steps.length - 1 && (
-                  <span className="text-xl text-gray-300">→</span>
-                )}
-              </div>
-            ))}
+            {steps.map((step, i) => {
+              const day =
+                1 +
+                steps
+                  .slice(1, i + 1)
+                  .reduce((a, s) => a + s.delay_days, 0);
+              return (
+                <div key={step.id} className="flex items-center gap-3">
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                      Dzień {day}
+                    </span>
+                    <StepCardCompact
+                      step={step}
+                      stats={statsByStepId.get(step.id) ?? null}
+                      active={selectedStepId === step.id}
+                      isFirst={i === 0}
+                      onClick={() => setSelectedStepId(step.id)}
+                    />
+                  </div>
+                  {i < steps.length - 1 && (
+                    <span className="text-xl text-gray-300">→</span>
+                  )}
+                </div>
+              );
+            })}
             {steps.length > 0 && (
               <span className="text-xl text-gray-300">→</span>
             )}
@@ -526,6 +538,20 @@ function MiniStat({
   );
 }
 
+function isoToLocalInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+    d.getHours(),
+  )}:${pad(d.getMinutes())}`;
+}
+
+function localInputToIso(local: string): string | null {
+  if (!local) return null;
+  return new Date(local).toISOString();
+}
+
 function SettingsPanel({
   campaign,
   onSaved,
@@ -539,6 +565,9 @@ function SettingsPanel({
   const [fromEmail, setFromEmail] = useState(campaign.from_email);
   const [fromName, setFromName] = useState(campaign.from_name ?? "");
   const [status, setStatus] = useState<CampaignStatus>(campaign.status);
+  const [scheduledLocal, setScheduledLocal] = useState(
+    isoToLocalInput(campaign.scheduled_at),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -552,6 +581,7 @@ function SettingsPanel({
         from_email: fromEmail,
         from_name: fromName || undefined,
         status,
+        scheduled_at: localInputToIso(scheduledLocal),
       });
       await onSaved();
       onClose();
@@ -615,6 +645,35 @@ function SettingsPanel({
           </option>
         ))}
       </select>
+
+      <div>
+        <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
+          Zaplanuj start (data i godzina)
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="datetime-local"
+            value={scheduledLocal}
+            onChange={(e) => setScheduledLocal(e.target.value)}
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+          />
+          {scheduledLocal && (
+            <button
+              type="button"
+              onClick={() => setScheduledLocal("")}
+              className="text-xs text-gray-500 hover:text-gray-900 underline"
+            >
+              Wyczyść (wysyłaj od razu)
+            </button>
+          )}
+        </div>
+        <p className="mt-1 text-xs text-gray-500">
+          Puste = pierwszy krok rusza zaraz po zapisaniu leadów. Ustawiona
+          przyszła data = pierwszy krok poczeka do tego momentu (kolejne kroki
+          liczą się od niego wg opóźnień).
+        </p>
+      </div>
+
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button
         disabled={saving}

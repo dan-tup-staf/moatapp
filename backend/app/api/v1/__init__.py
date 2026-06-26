@@ -10,6 +10,7 @@ from app.api.v1 import (
     icp,
     leads,
     lists,
+    ops,
     signal_sources,
     signals,
 )
@@ -26,3 +27,4 @@ api_router.include_router(dashboard.router)
 api_router.include_router(crm.router)
 api_router.include_router(icp.router)
 api_router.include_router(email.router)
+api_router.include_router(ops.router)
