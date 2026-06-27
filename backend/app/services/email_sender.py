@@ -197,7 +197,7 @@ async def _resolve_sender(db, campaign, enr):
     rotation configured, pick one of its accounts deterministically by
     enrollment id (so a prospect keeps the SAME mailbox across all steps —
     important for thread/deliverability consistency). Returns
-    (creds_or_None, from_email, from_name)."""
+    (creds_or_None, from_email, from_name, account_or_None)."""
     from app.models.email_account import EmailAccount
 
     ids = [
@@ -219,9 +219,47 @@ async def _resolve_sender(db, campaign, enr):
         ordered = [by_id[i] for i in ids if i in by_id]
         if ordered:
             acc = ordered[enr.id % len(ordered)]
-            return _creds_from_account(acc), acc.email, acc.from_name
-    creds = await _resolve_creds(db, campaign.user_id, campaign.from_email)
-    return creds, campaign.from_email, campaign.from_name
+            return _creds_from_account(acc), acc.email, acc.from_name, acc
+
+    acc = (
+        await db.execute(
+            select(EmailAccount).where(
+                EmailAccount.user_id == campaign.user_id,
+                func.lower(EmailAccount.email)
+                == (campaign.from_email or "").lower(),
+                EmailAccount.active.is_(True),
+            )
+        )
+    ).scalar_one_or_none()
+    return (
+        _creds_from_account(acc),
+        campaign.from_email,
+        campaign.from_name,
+        acc,
+    )
+
+
+async def _account_sent_today(db: AsyncSession, email: str) -> int:
+    """Count messages already sent today FROM a given mailbox address — for
+    per-account daily caps under rotation."""
+    day_start = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    return int(
+        (
+            await db.execute(
+                select(func.count())
+                .select_from(Message)
+                .where(
+                    func.lower(Message.from_email) == (email or "").lower(),
+                    Message.status == "sent",
+                    Message.sent_at.isnot(None),
+                    Message.sent_at >= day_start,
+                )
+            )
+        ).scalar()
+        or 0
+    )
 
 
 def _split_addrs(raw: str | None) -> list[str]:
@@ -554,9 +592,20 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
                 body = f"{body}\n\n---\n" + "\n".join(parts)
 
         # Pick the sending mailbox (supports rotation across mailboxes).
-        creds, send_from, send_from_name = await _resolve_sender(
+        creds, send_from, send_from_name, send_acc = await _resolve_sender(
             db, campaign, enr
         )
+
+        # Per-account daily cap — defer to tomorrow when the chosen mailbox has
+        # hit its own limit (protects warm-up / deliverability per mailbox).
+        if send_acc is not None and send_acc.daily_limit > 0:
+            if await _account_sent_today(db, send_acc.email) >= send_acc.daily_limit:
+                tomorrow = (
+                    datetime.now(timezone.utc) + timedelta(days=1)
+                ).replace(hour=9, minute=0, second=0, microsecond=0)
+                enr.next_send_at = tomorrow
+                await db.commit()
+                return None
 
         msg = Message(
             enrollment_id=enr.id,
