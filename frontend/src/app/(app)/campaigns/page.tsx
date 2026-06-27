@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
-import { api, ApiError, Campaign } from "@/lib/api-client";
+import { api, ApiError, Campaign, EmailAccount } from "@/lib/api-client";
 
 const STATUS_LABELS: Record<Campaign["status"], string> = {
   draft: "Draft",
@@ -35,6 +35,7 @@ export default function CampaignsPage() {
   const [name, setName] = useState("");
   const [fromEmail, setFromEmail] = useState("");
   const [fromName, setFromName] = useState("");
+  const [accounts, setAccounts] = useState<EmailAccount[]>([]);
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -54,7 +55,19 @@ export default function CampaignsPage() {
 
   useEffect(() => {
     refresh();
+    api.emailAccounts
+      .list()
+      .then((a) => setAccounts(a.filter((x) => x.active)))
+      .catch(() => setAccounts([]));
   }, []);
+
+  // Default the From to the first connected mailbox so sends actually use it.
+  useEffect(() => {
+    if (showForm && !fromEmail && accounts.length > 0) {
+      setFromEmail(accounts[0].email);
+      if (accounts[0].from_name) setFromName(accounts[0].from_name);
+    }
+  }, [showForm, accounts, fromEmail]);
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
@@ -154,22 +167,73 @@ export default function CampaignsPage() {
             className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
           />
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <input
-              type="email"
-              required
-              placeholder="from email *"
-              value={fromEmail}
-              onChange={(e) => setFromEmail(e.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
-            />
-            <input
-              type="text"
-              placeholder="from name (opcjonalnie)"
-              value={fromName}
-              onChange={(e) => setFromName(e.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
-            />
+            {accounts.length > 0 ? (
+              <div>
+                <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
+                  Skrzynka wysyłkowa *
+                </label>
+                <select
+                  required
+                  value={fromEmail}
+                  onChange={(e) => {
+                    setFromEmail(e.target.value);
+                    const a = accounts.find((x) => x.email === e.target.value);
+                    if (a?.from_name) setFromName(a.from_name);
+                  }}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+                >
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.email}>
+                      {a.email}
+                      {a.verified ? " ✓" : a.has_password ? " (nietestowana)" : " (brak hasła)"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div>
+                <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
+                  From email *
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="from email *"
+                  value={fromEmail}
+                  onChange={(e) => setFromEmail(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+                />
+              </div>
+            )}
+            <div>
+              <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
+                From name
+              </label>
+              <input
+                type="text"
+                placeholder="from name (opcjonalnie)"
+                value={fromName}
+                onChange={(e) => setFromName(e.target.value)}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+              />
+            </div>
           </div>
+          {accounts.length === 0 ? (
+            <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Nie masz podłączonej skrzynki — kampania nie wyśle się realnie.{" "}
+              <Link href="/deliverability" className="font-medium underline">
+                Podłącz skrzynkę
+              </Link>{" "}
+              w Dostarczalności, aby maile wychodziły z Twojego adresu.
+            </p>
+          ) : (
+            <p className="text-xs text-gray-500">
+              Maile wyjdą z wybranej, podłączonej skrzynki.{" "}
+              <Link href="/deliverability" className="underline">
+                Zarządzaj skrzynkami
+              </Link>
+            </p>
+          )}
           {formError && (
             <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
               {formError}

@@ -27,6 +27,7 @@ import {
   CampaignPipelineStage,
   CampaignStats,
   CampaignStatus,
+  EmailAccount,
   Enrollment,
   LeadList,
   PreviewResponse,
@@ -704,6 +705,14 @@ function SettingsPanel({
   const [name, setName] = useState(campaign.name);
   const [fromEmail, setFromEmail] = useState(campaign.from_email);
   const [fromName, setFromName] = useState(campaign.from_name ?? "");
+  const [accounts, setAccounts] = useState<EmailAccount[]>([]);
+
+  useEffect(() => {
+    api.emailAccounts
+      .list()
+      .then((a) => setAccounts(a.filter((x) => x.active)))
+      .catch(() => setAccounts([]));
+  }, []);
   const [status, setStatus] = useState<CampaignStatus>(campaign.status);
   const [scheduledLocal, setScheduledLocal] = useState(
     isoToLocalInput(campaign.scheduled_at),
@@ -857,15 +866,44 @@ function SettingsPanel({
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>
             <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
-              From email
+              Skrzynka wysyłkowa
             </label>
-            <input
-              type="email"
-              required
-              value={fromEmail}
-              onChange={(e) => setFromEmail(e.target.value)}
-              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            />
+            {accounts.length > 0 ? (
+              <select
+                required
+                value={fromEmail}
+                onChange={(e) => {
+                  setFromEmail(e.target.value);
+                  const a = accounts.find((x) => x.email === e.target.value);
+                  if (a?.from_name) setFromName(a.from_name);
+                }}
+                className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              >
+                {!accounts.some((a) => a.email === fromEmail) && (
+                  <option value={fromEmail}>
+                    {fromEmail} (niepodłączona)
+                  </option>
+                )}
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.email}>
+                    {a.email}
+                    {a.verified
+                      ? " ✓"
+                      : a.has_password
+                        ? " (nietestowana)"
+                        : " (brak hasła)"}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="email"
+                required
+                value={fromEmail}
+                onChange={(e) => setFromEmail(e.target.value)}
+                className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              />
+            )}
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
