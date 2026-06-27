@@ -101,8 +101,13 @@ screenów** (karty, kolory, ikony lucide, ładne stany). Uwaga: ikony brandowe
    sending_priority (kolejność w workerze), ESP Matching, Email Verification.
 6. **Subsequence** (rozgałęzienia warunkowe), **Sequence Score** realny scoring.
 7. **Reply tracking (IMAP)** → stop-on-reply + kolumna Replied. **Click tracking.**
-8. **Listy z filtrów** (audience builder → zapis listy) + **import CSV** +
-   **integracje** (LinkedIn/HubSpot jak na screenie; CSV realnie, reszta coming soon).
+8. ⏳ **Listy — CZĘŚCIOWO.** `/lists` przebudowane na siatkę kart + modal
+   „Dodaj prospektów" z zakładkami **Import CSV** (realnie: tworzy listę i
+   importuje plik jednym flow) / **Pusta lista** / **Integracje** (kafelki
+   LinkedIn/Sales Navigator/Recruiter/Reakcje/HubSpot/Salesforce = „wkrótce",
+   CSV = aktywne). `frontend/src/components/contacts.tsx` (ListsPanel +
+   AddProspectsModal). TODO: zakładka „Z sygnałów" (audience builder → zapis
+   nowej listy) — wymaga uogólnienia `audience/preview` na zapis listy (backend).
 9. **Rozgrzewanie:** integracja z Mailreach/Instantly; multi-mailbox.
 
 ## Sprzątanie (TODO)

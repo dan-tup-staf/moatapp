@@ -2,6 +2,17 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
+import {
+  ArrowRight,
+  Clock,
+  Database,
+  FileSpreadsheet,
+  Plus,
+  Trash2,
+  Upload,
+  Users,
+  X,
+} from "lucide-react";
 
 import {
   api,
@@ -21,11 +32,8 @@ import { ClientProfileView } from "@/components/client-profile";
 export function ListsPanel() {
   const [lists, setLists] = useState<LeadList[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
 
   async function refresh() {
     setLoading(true);
@@ -42,30 +50,9 @@ export function ListsPanel() {
     refresh();
   }, []);
 
-  async function handleCreate(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setCreating(true);
-    try {
-      await api.lists.create({
-        name,
-        description: description || undefined,
-      });
-      setName("");
-      setDescription("");
-      await refresh();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.detail : "Błąd tworzenia");
-    } finally {
-      setCreating(false);
-    }
-  }
-
   async function handleDelete(id: number, name: string) {
     if (
-      !window.confirm(
-        `Usunąć listę "${name}" razem ze wszystkimi jej leadami?`,
-      )
+      !window.confirm(`Usunąć listę "${name}" razem ze wszystkimi jej leadami?`)
     )
       return;
     try {
@@ -77,84 +64,346 @@ export function ListsPanel() {
   }
 
   return (
-    <div className="space-y-6">
-      <form
-        onSubmit={handleCreate}
-        className="space-y-3 rounded-lg border border-gray-200 bg-white p-4"
-      >
-        <h3 className="text-sm font-medium text-gray-700">Nowa lista</h3>
-        <input
-          type="text"
-          required
-          maxLength={255}
-          placeholder="Nazwa listy *"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
-        />
-        <input
-          type="text"
-          placeholder="Opis (opcjonalnie)"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
-        />
-        {error && (
-          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </p>
-        )}
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-gray-500">
+          {loading ? "" : `${lists.length} ${lists.length === 1 ? "lista" : "list"}`}
+        </p>
         <button
-          type="submit"
-          disabled={creating}
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          onClick={() => setShowAdd(true)}
+          className="inline-flex items-center gap-1.5 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
         >
-          {creating ? "Tworzenie..." : "Utwórz listę"}
+          <Plus className="h-4 w-4" /> Dodaj prospektów
         </button>
-      </form>
+      </div>
 
-      <div className="rounded-lg border border-gray-200 bg-white">
-        {loading ? (
-          <p className="p-4 text-sm text-gray-500">Ładowanie...</p>
-        ) : lists.length === 0 ? (
-          <p className="p-4 text-sm text-gray-500">
-            Brak list. Utwórz pierwszą powyżej.
+      {error && (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+
+      {loading ? (
+        <p className="text-sm text-gray-500">Ładowanie...</p>
+      ) : lists.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-gray-300 bg-white p-10 text-center">
+          <Users className="mx-auto h-8 w-8 text-gray-300" />
+          <p className="mt-2 text-sm font-medium text-gray-700">
+            Brak list prospektów
           </p>
-        ) : (
-          <ul className="divide-y divide-gray-200">
-            {lists.map((l) => (
-              <li
-                key={l.id}
-                className="flex items-center justify-between p-4 hover:bg-gray-50"
+          <p className="mt-1 text-xs text-gray-500">
+            Zaimportuj kontakty z CSV albo zbuduj listę z sygnałów.
+          </p>
+          <button
+            onClick={() => setShowAdd(true)}
+            className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+          >
+            <Plus className="h-4 w-4" /> Dodaj prospektów
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {lists.map((l) => (
+            <div
+              key={l.id}
+              className="group relative rounded-xl border border-gray-200 bg-white p-4 transition hover:border-gray-400 hover:shadow-sm"
+            >
+              <button
+                onClick={() => handleDelete(l.id, l.name)}
+                className="absolute right-3 top-3 text-gray-300 opacity-0 transition hover:text-red-600 group-hover:opacity-100"
+                title="Usuń listę"
               >
-                <div className="min-w-0 flex-1">
-                  <Link
-                    href={`/lists/${l.id}`}
-                    className="font-medium text-gray-900 hover:underline"
-                  >
-                    {l.name}
-                  </Link>
-                  {l.description && (
-                    <p className="mt-0.5 text-sm text-gray-500">
-                      {l.description}
-                    </p>
-                  )}
-                  <p className="mt-1 text-xs text-gray-400">
-                    {l.leads_count} {l.leads_count === 1 ? "lead" : "leadów"} •
-                    utworzona{" "}
-                    {new Date(l.created_at).toLocaleDateString("pl-PL")}
-                  </p>
+                <Trash2 className="h-4 w-4" />
+              </button>
+              <Link href={`/lists/${l.id}`} className="block">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-900/[0.04]">
+                  <Users className="h-4 w-4 text-gray-600" />
                 </div>
-                <button
-                  onClick={() => handleDelete(l.id, l.name)}
-                  className="ml-4 text-sm text-red-600 hover:underline"
-                >
-                  Usuń
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+                <p className="mt-3 truncate font-semibold text-gray-900 group-hover:underline">
+                  {l.name}
+                </p>
+                {l.description && (
+                  <p className="mt-0.5 line-clamp-2 text-xs text-gray-500">
+                    {l.description}
+                  </p>
+                )}
+                <p className="mt-3 text-xs text-gray-400">
+                  <span className="font-medium text-gray-700">
+                    {l.leads_count}
+                  </span>{" "}
+                  {l.leads_count === 1 ? "lead" : "leadów"} · utworzona{" "}
+                  {new Date(l.created_at).toLocaleDateString("pl-PL")}
+                </p>
+              </Link>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showAdd && (
+        <AddProspectsModal
+          onClose={() => setShowAdd(false)}
+          onDone={() => {
+            setShowAdd(false);
+            refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+type AddTab = "csv" | "empty" | "integrations";
+
+function AddProspectsModal({
+  onClose,
+  onDone,
+}: {
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [tab, setTab] = useState<AddTab>("csv");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8">
+      <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+          <h3 className="text-base font-semibold text-gray-900">
+            Dodaj prospektów
+          </h3>
+          <button
+            onClick={onClose}
+            className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="flex gap-1 border-b border-gray-200 px-5">
+          {(
+            [
+              { key: "csv", label: "Import z CSV" },
+              { key: "empty", label: "Pusta lista" },
+              { key: "integrations", label: "Integracje" },
+            ] as { key: AddTab; label: string }[]
+          ).map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={
+                "border-b-2 px-3 py-2.5 text-sm font-medium transition " +
+                (tab === t.key
+                  ? "border-gray-900 text-gray-900"
+                  : "border-transparent text-gray-500 hover:text-gray-900")
+              }
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="p-5">
+          {tab === "csv" && <CsvImportTab onDone={onDone} />}
+          {tab === "empty" && <EmptyListTab onDone={onDone} />}
+          {tab === "integrations" && (
+            <IntegrationsTab onPickCsv={() => setTab("csv")} />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyListTab({ onDone }: { onDone: () => void }) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await api.lists.create({ name, description: description || undefined });
+      onDone();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Błąd tworzenia");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <p className="text-sm text-gray-500">
+        Utwórz pustą listę i dodawaj do niej leady ręcznie lub z sygnałów.
+      </p>
+      <input
+        type="text"
+        required
+        maxLength={255}
+        placeholder="Nazwa listy *"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+      />
+      <input
+        type="text"
+        placeholder="Opis (opcjonalnie)"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+      />
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button
+        disabled={saving}
+        className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+      >
+        {saving ? "Tworzenie…" : "Utwórz listę"}
+      </button>
+    </form>
+  );
+}
+
+function CsvImportTab({ onDone }: { onDone: () => void }) {
+  const [name, setName] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ imported: number; skipped: number } | null>(
+    null,
+  );
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!file) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const list = await api.lists.create({
+        name: name || file.name.replace(/\.csv$/i, ""),
+      });
+      const r = await api.leads.importCsv(list.id, file);
+      setResult({ imported: r.imported, skipped: r.skipped });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Błąd importu CSV");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (result) {
+    return (
+      <div className="space-y-3 text-center">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
+          <FileSpreadsheet className="h-6 w-6 text-emerald-600" />
+        </div>
+        <p className="text-sm font-medium text-gray-900">
+          Zaimportowano {result.imported} leadów
+          {result.skipped > 0 && (
+            <span className="text-gray-500"> · pominięto {result.skipped}</span>
+          )}
+        </p>
+        <button
+          onClick={onDone}
+          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+        >
+          Gotowe
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <p className="text-sm text-gray-500">
+        Wgraj plik CSV z kolumnami: <code className="rounded bg-gray-100 px-1">email</code>,{" "}
+        <code className="rounded bg-gray-100 px-1">first_name</code>,{" "}
+        <code className="rounded bg-gray-100 px-1">last_name</code>,{" "}
+        <code className="rounded bg-gray-100 px-1">company</code>,{" "}
+        <code className="rounded bg-gray-100 px-1">title</code>.
+      </p>
+      <input
+        type="text"
+        placeholder="Nazwa listy (domyślnie nazwa pliku)"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+      />
+      <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center hover:border-gray-400">
+        <Upload className="h-6 w-6 text-gray-400" />
+        <span className="text-sm text-gray-600">
+          {file ? (
+            <span className="font-medium text-gray-900">{file.name}</span>
+          ) : (
+            "Kliknij, aby wybrać plik CSV"
+          )}
+        </span>
+        <input
+          type="file"
+          accept=".csv,text/csv"
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          className="hidden"
+        />
+      </label>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button
+        disabled={saving || !file}
+        className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+      >
+        {saving ? "Importuję…" : "Utwórz listę i importuj"}
+      </button>
+    </form>
+  );
+}
+
+const INTEGRATIONS: { name: string; desc: string; icon: typeof Database }[] = [
+  { name: "LinkedIn Search", desc: "Import z wyszukiwarki LinkedIn", icon: Users },
+  { name: "Sales Navigator", desc: "Listy i leady z Sales Navigatora", icon: Users },
+  { name: "LinkedIn Recruiter", desc: "Kandydaci z Recruitera", icon: Users },
+  { name: "Reakcje pod postem", desc: "Osoby reagujące na post", icon: Users },
+  { name: "HubSpot", desc: "Kontakty z HubSpot CRM", icon: Database },
+  { name: "Salesforce", desc: "Leady z Salesforce", icon: Database },
+];
+
+function IntegrationsTab({ onPickCsv }: { onPickCsv: () => void }) {
+  return (
+    <div className="space-y-3">
+      <button
+        onClick={onPickCsv}
+        className="flex w-full items-center gap-3 rounded-xl border border-gray-200 p-3 text-left transition hover:border-gray-900"
+      >
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-100">
+          <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-gray-900">Import z CSV</p>
+          <p className="text-xs text-gray-500">Wgraj plik z leadami</p>
+        </div>
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+          Aktywne <ArrowRight className="h-3 w-3" />
+        </span>
+      </button>
+
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {INTEGRATIONS.map((it) => (
+          <div
+            key={it.name}
+            className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50/50 p-3 opacity-90"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white">
+              <it.icon className="h-5 w-5 text-gray-400" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-gray-700">{it.name}</p>
+              <p className="truncate text-xs text-gray-400">{it.desc}</p>
+            </div>
+            <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-500">
+              <Clock className="h-3 w-3" /> wkrótce
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );
