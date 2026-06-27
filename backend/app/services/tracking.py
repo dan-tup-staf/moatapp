@@ -51,3 +51,20 @@ def click_redirect_url(message_id: int, target_url: str) -> str | None:
         return None
     u = quote(target_url, safe="")
     return f"{base}/api/v1/track/click/{message_id}-{click_sig(message_id)}?u={u}"
+
+
+def unsub_sig(lead_id: int) -> str:
+    """Signature for a lead's one-click unsubscribe link."""
+    return hmac.new(
+        settings.jwt_secret.encode("utf-8"),
+        f"unsub:{lead_id}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()[:16]
+
+
+def unsubscribe_url(lead_id: int) -> str | None:
+    """Public, signed unsubscribe link. None when no tracking base is set."""
+    base = (settings.tracking_base_url or "").rstrip("/")
+    if not base:
+        return None
+    return f"{base}/api/v1/track/unsubscribe/{lead_id}-{unsub_sig(lead_id)}"

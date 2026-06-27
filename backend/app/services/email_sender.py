@@ -29,7 +29,11 @@ from app.models.sequence_step import SequenceStep
 from app.services.campaigns import list_variants, pick_variant, render_template
 from app.services.icp import get_or_none as _get_icp
 from app.services.icp import merge_tags as _icp_merge_tags
-from app.services.tracking import click_redirect_url, open_pixel_url
+from app.services.tracking import (
+    click_redirect_url,
+    open_pixel_url,
+    unsubscribe_url,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +96,14 @@ def _build_html(
             trail = url[-1] + trail
             url = url[:-1]
         out.append(_html.escape(body[last : m.start()]))
-        href = (click_redirect_url(message_id, url) if track_clicks else None) or url
+        # Don't route our own tracking/unsubscribe links through the click
+        # tracker — that would inflate click stats and double-redirect.
+        own = "/api/v1/track/" in url
+        href = (
+            click_redirect_url(message_id, url)
+            if track_clicks and not own
+            else None
+        ) or url
         out.append(
             f'<a href="{_html.escape(href, quote=True)}">{_html.escape(url)}</a>'
         )
@@ -126,6 +137,7 @@ async def _send_via_smtp(
     html: str | None = None,
     cc: str | None = None,
     bcc: str | None = None,
+    unsub_url: str | None = None,
 ) -> None:
     # Prefer the authenticated mailbox address as the From — many providers
     # reject a From that doesn't match the logged-in account.
@@ -140,9 +152,15 @@ async def _send_via_smtp(
     if cc_list:
         msg["Cc"] = ", ".join(cc_list)
     msg["Subject"] = subject
-    # Lightweight unsubscribe header (improves deliverability). Token-based
-    # one-click handling is a later milestone.
-    msg["List-Unsubscribe"] = f"<mailto:{actual_from}?subject=unsubscribe>"
+    # Unsubscribe header (improves deliverability). Prefer a real signed URL
+    # with RFC 8058 one-click POST; fall back to mailto when no public base.
+    if unsub_url:
+        msg["List-Unsubscribe"] = (
+            f"<{unsub_url}>, <mailto:{actual_from}?subject=unsubscribe>"
+        )
+        msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
+    else:
+        msg["List-Unsubscribe"] = f"<mailto:{actual_from}?subject=unsubscribe>"
     msg.set_content(body)
     if html:
         msg.add_alternative(html, subtype="html")
@@ -197,6 +215,14 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
         await db.execute(select(Lead).where(Lead.id == enr.lead_id))
     ).scalar_one_or_none()
     if lead is None:
+        return None
+
+    # Honour unsubscribes — never email a lead who opted out. Stop their
+    # sequence so they're not re-picked every tick.
+    if lead.status == "unsubscribed":
+        enr.status = "completed"
+        enr.next_send_at = None
+        await db.commit()
         return None
 
     steps = list(
@@ -256,10 +282,15 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
         extra = _icp_merge_tags(icp.icp_fields if icp else None)
         subject = render_template(chosen_subject, lead, extra)
         body = render_template(chosen_body, lead, extra)
+        unsub_url = None
         if campaign.include_unsubscribe:
             footer = (campaign.unsubscribe_text or _DEFAULT_UNSUB).strip()
-            if footer:
-                body = f"{body}\n\n---\n{footer}"
+            unsub_url = unsubscribe_url(lead.id)
+            parts = [p for p in [footer] if p]
+            if unsub_url:
+                parts.append(f"Wypisz się jednym kliknięciem: {unsub_url}")
+            if parts:
+                body = f"{body}\n\n---\n" + "\n".join(parts)
 
         msg = Message(
             enrollment_id=enr.id,
@@ -297,6 +328,7 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
                 html=html,
                 cc=campaign.cc,
                 bcc=campaign.bcc,
+                unsub_url=unsub_url,
             )
             msg.sent_at = datetime.now(timezone.utc)
             msg.status = "sent"
