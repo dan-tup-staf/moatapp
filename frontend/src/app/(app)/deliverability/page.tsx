@@ -227,12 +227,44 @@ function AccountRow({
     }
   }
 
+  async function testConn() {
+    setBusy(true);
+    try {
+      const res = await api.emailAccounts.test(account.id);
+      alert(
+        res.ok
+          ? `✅ ${res.detail}`
+          : `❌ Test nieudany:\n${res.detail}`,
+      );
+      onChanged();
+    } catch (e) {
+      alert(e instanceof ApiError ? e.detail : "Błąd testu");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const warm = WARMUP[account.warmup_status];
+  const conn = account.has_password
+    ? account.verified
+      ? { cls: "bg-emerald-50 text-emerald-700", label: "Połączona" }
+      : account.last_error
+        ? { cls: "bg-red-50 text-red-600", label: "Błąd połączenia" }
+        : { cls: "bg-amber-50 text-amber-700", label: "Niezweryfikowana" }
+    : { cls: "bg-gray-100 text-gray-500", label: "Brak hasła" };
 
   return (
     <tr className="hover:bg-gray-50/60">
       <td className="px-4 py-3">
-        <div className="font-medium text-gray-900">{account.email}</div>
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-gray-900">{account.email}</span>
+          <span
+            title={account.last_error || undefined}
+            className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${conn.cls}`}
+          >
+            {conn.label}
+          </span>
+        </div>
         <div className="text-xs text-gray-500">
           {account.from_name || "— brak nazwy nadawcy —"}
           {account.smtp_host && (
@@ -320,14 +352,26 @@ function AccountRow({
         )}
       </td>
       <td className="px-4 py-3 text-right">
-        <button
-          onClick={remove}
-          disabled={busy}
-          className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600 disabled:opacity-50"
-          title="Usuń"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
+        <div className="flex items-center justify-end gap-1">
+          {account.has_password && (
+            <button
+              onClick={testConn}
+              disabled={busy}
+              className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium hover:bg-gray-100 disabled:opacity-50"
+              title="Wyślij testowy mail przez tę skrzynkę"
+            >
+              Test
+            </button>
+          )}
+          <button
+            onClick={remove}
+            disabled={busy}
+            className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600 disabled:opacity-50"
+            title="Usuń"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
       </td>
     </tr>
   );
@@ -372,6 +416,74 @@ function DailyLimitEditor({
   );
 }
 
+type SmtpSec = "starttls" | "ssl" | "none";
+
+type Preset = {
+  key: string;
+  label: string;
+  provider: string;
+  host: string;
+  port: number;
+  security: SmtpSec;
+  instructions: { title: string; steps: string[]; link?: string };
+};
+
+const PRESETS: Preset[] = [
+  {
+    key: "gmail",
+    label: "Gmail / Google Workspace",
+    provider: "google",
+    host: "smtp.gmail.com",
+    port: 587,
+    security: "starttls",
+    instructions: {
+      title: "Jak podłączyć Gmail / Google Workspace",
+      steps: [
+        "Włącz weryfikację dwuetapową na koncie Google (wymagane).",
+        "Wejdź na myaccount.google.com/apppasswords i wygeneruj „Hasło aplikacji” (App Password).",
+        "Skopiuj 16-znakowy kod i wklej go poniżej jako hasło (nie zwykłe hasło do konta!).",
+        "Login = Twój pełny adres Gmail. Host smtp.gmail.com, port 587, STARTTLS.",
+      ],
+      link: "https://myaccount.google.com/apppasswords",
+    },
+  },
+  {
+    key: "outlook",
+    label: "Outlook / Microsoft 365",
+    provider: "microsoft",
+    host: "smtp.office365.com",
+    port: 587,
+    security: "starttls",
+    instructions: {
+      title: "Jak podłączyć Outlook / Microsoft 365",
+      steps: [
+        "Włącz uwierzytelnianie wieloskładnikowe (MFA) na koncie Microsoft.",
+        "Wygeneruj „Hasło aplikacji” w ustawieniach zabezpieczeń konta.",
+        "Login = Twój pełny adres e-mail. Wklej hasło aplikacji poniżej.",
+        "Host smtp.office365.com, port 587, STARTTLS. (W niektórych tenantach SMTP AUTH trzeba włączyć w panelu admina.)",
+      ],
+      link: "https://account.microsoft.com/security",
+    },
+  },
+  {
+    key: "custom",
+    label: "Własny SMTP / inny dostawca",
+    provider: "smtp",
+    host: "",
+    port: 587,
+    security: "starttls",
+    instructions: {
+      title: "Własny serwer SMTP",
+      steps: [
+        "Podaj host SMTP swojego dostawcy (np. smtp.twojafirma.pl).",
+        "Port 587 = STARTTLS (najczęstszy), port 465 = SSL/TLS.",
+        "Login to zwykle Twój pełny adres e-mail; hasło — hasło skrzynki lub hasło aplikacji.",
+        "Po dodaniu kliknij „Wyślij test”, aby zweryfikować połączenie.",
+      ],
+    },
+  },
+];
+
 function AddAccountForm({
   onCreated,
   onCancel,
@@ -379,31 +491,67 @@ function AddAccountForm({
   onCreated: () => void;
   onCancel: () => void;
 }) {
+  const [presetKey, setPresetKey] = useState("gmail");
+  const preset = PRESETS.find((p) => p.key === presetKey) ?? PRESETS[0];
+
   const [email, setEmail] = useState("");
   const [fromName, setFromName] = useState("");
-  const [provider, setProvider] = useState("smtp");
-  const [smtpHost, setSmtpHost] = useState("");
+  const [smtpHost, setSmtpHost] = useState(preset.host);
+  const [smtpPort, setSmtpPort] = useState(String(preset.port));
+  const [security, setSecurity] = useState<SmtpSec>(preset.security);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [dailyLimit, setDailyLimit] = useState("50");
   const [tags, setTags] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function pickPreset(key: string) {
+    setPresetKey(key);
+    const p = PRESETS.find((x) => x.key === key);
+    if (p) {
+      setSmtpHost(p.host);
+      setSmtpPort(String(p.port));
+      setSecurity(p.security);
+    }
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError(null);
     try {
-      await api.emailAccounts.create({
+      const acc = await api.emailAccounts.create({
         email: email.trim(),
         from_name: fromName.trim() || null,
-        provider,
+        provider: preset.provider,
         smtp_host: smtpHost.trim() || null,
+        smtp_port: Number(smtpPort) || null,
+        smtp_username: (username.trim() || email.trim()) || null,
+        smtp_password: password || null,
+        smtp_security: security,
         daily_limit: Number(dailyLimit) || 0,
         tags: tags
           .split(",")
           .map((t) => t.trim())
           .filter(Boolean),
       });
+      // Verify immediately so the user gets instant feedback.
+      if (password) {
+        try {
+          const res = await api.emailAccounts.test(acc.id);
+          if (!res.ok) {
+            setError(
+              `Skrzynka dodana, ale test się nie powiódł: ${res.detail}. Sprawdź login/hasło/host.`,
+            );
+            setSaving(false);
+            onCreated();
+            return;
+          }
+        } catch {
+          // non-fatal — account is created, user can re-test from the list
+        }
+      }
       onCreated();
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : "Błąd dodawania skrzynki");
@@ -415,19 +563,56 @@ function AddAccountForm({
   return (
     <form
       onSubmit={submit}
-      className="space-y-3 rounded-xl border-2 border-gray-900 bg-white p-4"
+      className="space-y-4 rounded-xl border-2 border-gray-900 bg-white p-4"
     >
       <div className="flex items-center gap-2">
         <Flame className="h-4 w-4 text-amber-500" />
         <h3 className="text-sm font-semibold text-gray-900">
-          Nowa skrzynka wysyłkowa
+          Podłącz skrzynkę wysyłkową
         </h3>
       </div>
+
+      {/* Provider presets */}
+      <div className="flex flex-wrap gap-2">
+        {PRESETS.map((p) => (
+          <button
+            key={p.key}
+            type="button"
+            onClick={() => pickPreset(p.key)}
+            className={
+              "rounded-lg border px-3 py-1.5 text-sm font-medium transition " +
+              (presetKey === p.key
+                ? "border-gray-900 bg-gray-900 text-white"
+                : "border-gray-300 text-gray-700 hover:bg-gray-50")
+            }
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Instructions */}
+      <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
+        <p className="font-semibold">{preset.instructions.title}</p>
+        <ol className="mt-1.5 list-decimal space-y-1 pl-4">
+          {preset.instructions.steps.map((s, i) => (
+            <li key={i}>{s}</li>
+          ))}
+        </ol>
+        {preset.instructions.link && (
+          <a
+            href={preset.instructions.link}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 inline-block font-medium underline"
+          >
+            Otwórz ustawienia →
+          </a>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div>
-          <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
-            Adres e-mail *
-          </label>
+        <Field label="Adres e-mail *">
           <input
             type="email"
             required
@@ -436,11 +621,8 @@ function AddAccountForm({
             placeholder="kontakt@twojafirma.pl"
             className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
-            Nazwa nadawcy
-          </label>
+        </Field>
+        <Field label="Nazwa nadawcy">
           <input
             type="text"
             value={fromName}
@@ -448,38 +630,59 @@ function AddAccountForm({
             placeholder="Daniel z MOATION"
             className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
-            Dostawca
-          </label>
-          <select
-            value={provider}
-            onChange={(e) => setProvider(e.target.value)}
-            className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-          >
-            <option value="smtp">SMTP</option>
-            <option value="google">Google Workspace</option>
-            <option value="microsoft">Microsoft 365</option>
-            <option value="other">Inny</option>
-          </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
-            Host SMTP
-          </label>
+        </Field>
+        <Field label="Host SMTP *">
           <input
             type="text"
+            required
             value={smtpHost}
             onChange={(e) => setSmtpHost(e.target.value)}
-            placeholder="smtp.twojafirma.pl"
+            placeholder="smtp.gmail.com"
             className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Port">
+            <input
+              type="number"
+              value={smtpPort}
+              onChange={(e) => setSmtpPort(e.target.value)}
+              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+          </Field>
+          <Field label="Szyfrowanie">
+            <select
+              value={security}
+              onChange={(e) => setSecurity(e.target.value as SmtpSec)}
+              className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value="starttls">STARTTLS (587)</option>
+              <option value="ssl">SSL/TLS (465)</option>
+              <option value="none">Brak</option>
+            </select>
+          </Field>
         </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
-            Dzienny limit
-          </label>
+        <Field label="Login (zwykle e-mail)">
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder={email || "kontakt@twojafirma.pl"}
+            className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          />
+        </Field>
+        <Field label="Hasło / hasło aplikacji *">
+          <input
+            type="password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••••••"
+            autoComplete="new-password"
+            className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          />
+        </Field>
+        <Field label="Dzienny limit">
           <input
             type="number"
             min={0}
@@ -487,11 +690,8 @@ function AddAccountForm({
             onChange={(e) => setDailyLimit(e.target.value)}
             className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
-            Tagi (po przecinku)
-          </label>
+        </Field>
+        <Field label="Tagi (po przecinku)">
           <input
             type="text"
             value={tags}
@@ -499,8 +699,14 @@ function AddAccountForm({
             placeholder="sprzedaż, PL"
             className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           />
-        </div>
+        </Field>
       </div>
+
+      <p className="text-xs text-gray-500">
+        Hasło jest szyfrowane przy zapisie. Po dodaniu wyślemy testowy mail na
+        Twój adres, aby potwierdzić, że wysyłka działa.
+      </p>
+
       {error && (
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
@@ -511,7 +717,7 @@ function AddAccountForm({
           disabled={saving}
           className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
         >
-          {saving ? "Dodaję…" : "Dodaj skrzynkę"}
+          {saving ? "Łączę i testuję…" : "Podłącz i przetestuj"}
         </button>
         <button
           type="button"
@@ -522,5 +728,22 @@ function AddAccountForm({
         </button>
       </div>
     </form>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium uppercase text-gray-500">
+        {label}
+      </label>
+      {children}
+    </div>
   );
 }

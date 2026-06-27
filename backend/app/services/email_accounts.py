@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.email_account import EmailAccount
 from app.schemas.email_accounts import EmailAccountCreate, EmailAccountUpdate
 from app.services.campaigns import join_tags, split_tags
+from app.services.crypto import encrypt
 from app.services.domain_health import check_domain, normalize_domain
 
 
@@ -49,6 +50,8 @@ async def create_account(
         smtp_host=payload.smtp_host,
         smtp_port=payload.smtp_port,
         smtp_username=payload.smtp_username,
+        smtp_password_enc=encrypt(payload.smtp_password or ""),
+        smtp_security=payload.smtp_security.value,
         daily_limit=payload.daily_limit,
         tags=join_tags(payload.tags),
     )
@@ -66,6 +69,15 @@ async def update_account(
         account.tags = join_tags(data.pop("tags"))
     if "warmup_status" in data and hasattr(data.get("warmup_status"), "value"):
         data["warmup_status"] = data["warmup_status"].value
+    if "smtp_security" in data and hasattr(data.get("smtp_security"), "value"):
+        data["smtp_security"] = data["smtp_security"].value
+    # A new password replaces the stored ciphertext; changing creds invalidates
+    # the previous "verified" state. Omitting smtp_password keeps the old one.
+    if "smtp_password" in data:
+        pwd = data.pop("smtp_password")
+        if pwd:
+            account.smtp_password_enc = encrypt(pwd)
+            account.verified = False
     for k, v in data.items():
         setattr(account, k, v)
     await db.commit()
@@ -76,6 +88,30 @@ async def update_account(
 async def delete_account(db: AsyncSession, account: EmailAccount) -> None:
     await db.delete(account)
     await db.commit()
+
+
+async def test_account(db: AsyncSession, account: EmailAccount) -> tuple[bool, str]:
+    """Send a test email through the account's own SMTP. Records verified /
+    last_error / last_test_at. Returns (ok, detail)."""
+    from datetime import datetime, timezone
+
+    from app.services.email_sender import send_account_test
+
+    now = datetime.now(timezone.utc)
+    try:
+        await send_account_test(account)
+        account.verified = True
+        account.last_error = None
+        account.last_test_at = now
+        await db.commit()
+        return True, f"Wysłano testowy mail na {account.email}. Sprawdź skrzynkę."
+    except Exception as e:  # noqa: BLE001 — surface any SMTP error to the user
+        detail = f"{type(e).__name__}: {e}"[:1000]
+        account.verified = False
+        account.last_error = detail
+        account.last_test_at = now
+        await db.commit()
+        return False, detail
 
 
 def tags_list(account: EmailAccount) -> list[str]:

@@ -121,6 +121,71 @@ def _build_html(
     return f"<html><body>{inner}{pixel}</body></html>"
 
 
+class SmtpCreds:
+    """Resolved SMTP transport for a connected EmailAccount."""
+
+    __slots__ = (
+        "host",
+        "port",
+        "username",
+        "password",
+        "security",
+        "from_email",
+        "from_name",
+    )
+
+    def __init__(
+        self,
+        *,
+        host: str,
+        port: int,
+        username: str | None,
+        password: str | None,
+        security: str,
+        from_email: str,
+        from_name: str | None,
+    ) -> None:
+        self.host = host
+        self.port = port
+        self.username = username
+        self.password = password
+        self.security = security
+        self.from_email = from_email
+        self.from_name = from_name
+
+
+async def _resolve_creds(db: AsyncSession, user_id: int, from_email: str):
+    """Find an active connected EmailAccount matching the campaign's from_email
+    and turn it into SmtpCreds. Returns None when there's no usable account, so
+    the caller falls back to the env-configured mailbox."""
+    from app.models.email_account import EmailAccount
+    from app.services.crypto import decrypt
+
+    acc = (
+        await db.execute(
+            select(EmailAccount).where(
+                EmailAccount.user_id == user_id,
+                func.lower(EmailAccount.email) == (from_email or "").lower(),
+                EmailAccount.active.is_(True),
+            )
+        )
+    ).scalar_one_or_none()
+    if acc is None or not acc.smtp_host or not acc.smtp_password_enc:
+        return None
+    password = decrypt(acc.smtp_password_enc)
+    if not password:
+        return None
+    return SmtpCreds(
+        host=acc.smtp_host,
+        port=acc.smtp_port or (465 if acc.smtp_security == "ssl" else 587),
+        username=acc.smtp_username or acc.email,
+        password=password,
+        security=acc.smtp_security or "starttls",
+        from_email=acc.email,
+        from_name=acc.from_name,
+    )
+
+
 def _split_addrs(raw: str | None) -> list[str]:
     if not raw:
         return []
@@ -138,11 +203,29 @@ async def _send_via_smtp(
     cc: str | None = None,
     bcc: str | None = None,
     unsub_url: str | None = None,
+    creds: "SmtpCreds | None" = None,
 ) -> None:
-    # Prefer the authenticated mailbox address as the From — many providers
-    # reject a From that doesn't match the logged-in account.
-    actual_from = settings.smtp_from_email or from_email
-    actual_name = from_name or settings.smtp_from_name or None
+    # A connected EmailAccount (creds) wins over the env-configured mailbox.
+    # Many providers reject a From that doesn't match the logged-in account, so
+    # the From defaults to the authenticated address.
+    if creds is not None:
+        host = creds.host
+        port = creds.port
+        username = creds.username or None
+        password = creds.password or None
+        use_tls = creds.security == "ssl"
+        start_tls = True if creds.security == "starttls" else None
+        actual_from = creds.from_email or from_email
+        actual_name = from_name or creds.from_name or None
+    else:
+        host = settings.smtp_host
+        port = settings.smtp_port
+        username = settings.smtp_username or None
+        password = settings.smtp_password or None
+        use_tls = settings.smtp_use_tls
+        start_tls = settings.smtp_starttls or None
+        actual_from = settings.smtp_from_email or from_email
+        actual_name = from_name or settings.smtp_from_name or None
 
     msg = EmailMessage()
     msg["From"] = f"{actual_name} <{actual_from}>" if actual_name else actual_from
@@ -171,12 +254,12 @@ async def _send_via_smtp(
     await aiosmtplib.send(
         msg,
         recipients=recipients,
-        hostname=settings.smtp_host,
-        port=settings.smtp_port,
-        username=settings.smtp_username or None,
-        password=settings.smtp_password or None,
-        use_tls=settings.smtp_use_tls,
-        start_tls=settings.smtp_starttls or None,
+        hostname=host,
+        port=port,
+        username=username,
+        password=password,
+        use_tls=use_tls,
+        start_tls=start_tls,
     )
 
 
@@ -192,6 +275,39 @@ async def send_test_email(to_email: str) -> None:
             "Jeśli ją widzisz, Twoja skrzynka wysyłkowa jest poprawnie "
             "skonfigurowana i możesz wysyłać kampanie.\n"
         ),
+    )
+
+
+async def send_account_test(account) -> None:
+    """Send a test email through a connected EmailAccount's own SMTP creds
+    (decrypting its stored password). Sends to the account's own address.
+    Raises on any SMTP failure so the caller can record last_error."""
+    from app.services.crypto import decrypt
+
+    password = decrypt(account.smtp_password_enc)
+    if not account.smtp_host or not password:
+        raise RuntimeError("Brak hosta SMTP lub hasła — uzupełnij dane skrzynki")
+    creds = SmtpCreds(
+        host=account.smtp_host,
+        port=account.smtp_port
+        or (465 if account.smtp_security == "ssl" else 587),
+        username=account.smtp_username or account.email,
+        password=password,
+        security=account.smtp_security or "starttls",
+        from_email=account.email,
+        from_name=account.from_name,
+    )
+    await _send_via_smtp(
+        to_email=account.email,
+        from_email=account.email,
+        from_name=account.from_name,
+        subject="MOATION — skrzynka podłączona ✅",
+        body=(
+            "Gratulacje! Ta skrzynka jest poprawnie podłączona do MOATION i "
+            "może wysyłać kampanie.\n\nJeśli widzisz tę wiadomość we własnej "
+            "skrzynce, wszystko działa.\n"
+        ),
+        creds=creds,
     )
 
 
@@ -318,6 +434,7 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
                 pixel_url=pixel,
             )
 
+        creds = await _resolve_creds(db, campaign.user_id, campaign.from_email)
         try:
             await _send_via_smtp(
                 to_email=lead.email,
@@ -329,6 +446,7 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
                 cc=campaign.cc,
                 bcc=campaign.bcc,
                 unsub_url=unsub_url,
+                creds=creds,
             )
             msg.sent_at = datetime.now(timezone.utc)
             msg.status = "sent"

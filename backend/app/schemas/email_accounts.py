@@ -11,6 +11,12 @@ class WarmupStatus(str, Enum):
     PAUSED = "paused"
 
 
+class SmtpSecurity(str, Enum):
+    STARTTLS = "starttls"
+    SSL = "ssl"
+    NONE = "none"
+
+
 class EmailAccountCreate(BaseModel):
     email: EmailStr
     from_name: str | None = Field(default=None, max_length=255)
@@ -18,6 +24,8 @@ class EmailAccountCreate(BaseModel):
     smtp_host: str | None = Field(default=None, max_length=255)
     smtp_port: int | None = Field(default=None, ge=1, le=65535)
     smtp_username: str | None = Field(default=None, max_length=255)
+    smtp_password: str | None = Field(default=None, max_length=512)
+    smtp_security: SmtpSecurity = SmtpSecurity.STARTTLS
     daily_limit: int = Field(default=50, ge=0, le=100000)
     tags: list[str] = Field(default_factory=list)
 
@@ -28,6 +36,9 @@ class EmailAccountUpdate(BaseModel):
     smtp_host: str | None = Field(default=None, max_length=255)
     smtp_port: int | None = Field(default=None, ge=1, le=65535)
     smtp_username: str | None = Field(default=None, max_length=255)
+    # Omit to keep the existing password; pass a new value to replace it.
+    smtp_password: str | None = Field(default=None, max_length=512)
+    smtp_security: SmtpSecurity | None = None
     daily_limit: int | None = Field(default=None, ge=0, le=100000)
     tags: list[str] | None = None
     warmup_status: WarmupStatus | None = None
@@ -44,11 +55,22 @@ class EmailAccountRead(BaseModel):
     smtp_host: str | None
     smtp_port: int | None
     smtp_username: str | None
+    smtp_security: SmtpSecurity = SmtpSecurity.STARTTLS
+    # Never expose the password; just whether one is stored.
+    has_password: bool = False
+    verified: bool = False
+    last_test_at: datetime | None = None
+    last_error: str | None = None
     daily_limit: int
     tags: list[str] = Field(default_factory=list)
     warmup_status: WarmupStatus
     active: bool
     created_at: datetime
+
+
+class EmailAccountTestResult(BaseModel):
+    ok: bool
+    detail: str
 
 
 class SetupCheck(BaseModel):

@@ -40,6 +40,22 @@ class EmailAccount(Base):
     smtp_host: Mapped[str | None] = mapped_column(String(255), nullable=True)
     smtp_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
     smtp_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Encrypted-at-rest SMTP password (Fernet ciphertext). "" = not set.
+    smtp_password_enc: Mapped[str] = mapped_column(
+        String(1024), nullable=False, server_default=""
+    )
+    # starttls (587) | ssl (465) | none
+    smtp_security: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="starttls"
+    )
+    # Whether the last "test connection" succeeded.
+    verified: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    last_test_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     daily_limit: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="50"
     )

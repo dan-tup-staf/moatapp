@@ -8,6 +8,7 @@ from app.schemas.email_accounts import (
     EmailAccountCreate,
     EmailAccountRead,
     EmailAccountSetup,
+    EmailAccountTestResult,
     EmailAccountUpdate,
 )
 from app.services import email_accounts as svc
@@ -18,6 +19,7 @@ router = APIRouter(prefix="/email-accounts", tags=["email-accounts"])
 def _to_read(acc) -> EmailAccountRead:
     item = EmailAccountRead.model_validate(acc)
     item.tags = svc.tags_list(acc)
+    item.has_password = bool(getattr(acc, "smtp_password_enc", ""))
     return item
 
 
@@ -69,6 +71,19 @@ async def delete_account(
     if acc is None:
         raise HTTPException(status_code=404, detail="Nie znaleziono skrzynki")
     await svc.delete_account(db, acc)
+
+
+@router.post("/{account_id}/test", response_model=EmailAccountTestResult)
+async def test_account(
+    account_id: int,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> EmailAccountTestResult:
+    acc = await svc.get_account(db, current.id, account_id)
+    if acc is None:
+        raise HTTPException(status_code=404, detail="Nie znaleziono skrzynki")
+    ok, detail = await svc.test_account(db, acc)
+    return EmailAccountTestResult(ok=ok, detail=detail)
 
 
 @router.get("/{account_id}/setup", response_model=EmailAccountSetup)

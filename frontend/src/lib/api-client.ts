@@ -60,6 +60,8 @@ export type DomainHealth = {
 
 export type WarmupStatus = "off" | "warming" | "ready" | "paused";
 
+export type SmtpSecurity = "starttls" | "ssl" | "none";
+
 export type EmailAccount = {
   id: number;
   email: string;
@@ -68,6 +70,11 @@ export type EmailAccount = {
   smtp_host: string | null;
   smtp_port: number | null;
   smtp_username: string | null;
+  smtp_security: SmtpSecurity;
+  has_password: boolean;
+  verified: boolean;
+  last_test_at: string | null;
+  last_error: string | null;
   daily_limit: number;
   tags: string[];
   warmup_status: WarmupStatus;
@@ -82,6 +89,8 @@ export type EmailAccountCreate = {
   smtp_host?: string | null;
   smtp_port?: number | null;
   smtp_username?: string | null;
+  smtp_password?: string | null;
+  smtp_security?: SmtpSecurity;
   daily_limit?: number;
   tags?: string[];
 };
@@ -92,11 +101,15 @@ export type EmailAccountUpdate = {
   smtp_host?: string | null;
   smtp_port?: number | null;
   smtp_username?: string | null;
+  smtp_password?: string | null;
+  smtp_security?: SmtpSecurity;
   daily_limit?: number;
   tags?: string[];
   warmup_status?: WarmupStatus;
   active?: boolean;
 };
+
+export type EmailAccountTestResult = { ok: boolean; detail: string };
 
 export type EmailAccountSetup = {
   domain: string;
@@ -802,6 +815,10 @@ export const api = {
       authed<void>(`/email-accounts/${id}`, { method: "DELETE" }),
     setup: (id: number) =>
       authed<EmailAccountSetup>(`/email-accounts/${id}/setup`),
+    test: (id: number) =>
+      authed<EmailAccountTestResult>(`/email-accounts/${id}/test`, {
+        method: "POST",
+      }),
   },
 
   // Campaign groups (umbrella "Kampanie" over sequences)
