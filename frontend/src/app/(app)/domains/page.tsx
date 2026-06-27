@@ -115,6 +115,23 @@ export default function DomainsPage() {
   );
 }
 
+function ScoreRing({ pct }: { pct: number }) {
+  const color = pct >= 80 ? "#10b981" : pct >= 50 ? "#f59e0b" : "#ef4444";
+  const text =
+    pct >= 80 ? "text-emerald-600" : pct >= 50 ? "text-amber-600" : "text-red-600";
+  return (
+    <div
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+      style={{ background: `conic-gradient(${color} ${pct * 3.6}deg, #e5e7eb 0deg)` }}
+      title={`Zdrowie domeny: ${pct}%`}
+    >
+      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white">
+        <span className={`text-[11px] font-bold ${text}`}>{pct}</span>
+      </div>
+    </div>
+  );
+}
+
 function DomainRow({
   domain,
   onDelete,
@@ -144,29 +161,35 @@ function DomainRow({
   }, [domain.id]);
 
   const healthy = health?.healthy ?? false;
+  const pct = health
+    ? Math.round((health.score / Math.max(1, health.max_score)) * 100)
+    : 0;
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-gray-900">{domain.domain}</span>
-          {health && (
-            <span
-              className={
-                "rounded-full px-2 py-0.5 text-xs " +
-                (healthy
-                  ? "bg-emerald-100 text-emerald-800"
-                  : "bg-amber-100 text-amber-800")
-              }
-            >
-              {healthy
-                ? "Zdrowa"
-                : `${health.score}/${health.max_score} OK — wymaga uwagi`}
-            </span>
-          )}
-          {checking && (
-            <span className="text-xs text-gray-400">sprawdzam DNS…</span>
-          )}
+        <div className="flex items-center gap-3">
+          {health && <ScoreRing pct={pct} />}
+          <div>
+            <span className="font-semibold text-gray-900">{domain.domain}</span>
+            {health && (
+              <span
+                className={
+                  "ml-2 rounded-full px-2 py-0.5 text-xs " +
+                  (healthy
+                    ? "bg-emerald-100 text-emerald-800"
+                    : "bg-amber-100 text-amber-800")
+                }
+              >
+                {healthy
+                  ? "Zdrowa"
+                  : `${health.score}/${health.max_score} OK — wymaga uwagi`}
+              </span>
+            )}
+            {checking && (
+              <span className="ml-2 text-xs text-gray-400">sprawdzam DNS…</span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <button

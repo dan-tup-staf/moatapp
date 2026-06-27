@@ -87,7 +87,8 @@ screenów** (karty, kolory, ikony lucide, ładne stany). Uwaga: ikony brandowe
    `/email-accounts/{id}/setup` (Setup Score = DoH SPF/DKIM/DMARC/MX + SMTP host
    + from_name). TODO dalej: rotacja nadawców (account_id na Message), realny
    warmup (Mailreach/Instantly), Deliverability % per skrzynka (bounce/spam).
-3. **Domeny:** dopieszczenie wizualne (score ring, kolory).
+3. ✅ **Domeny: score ring — ZROBIONE.** Kołowy wskaźnik zdrowia (%) per domena
+   w `/domains` (spójny ze ScoreRing w Dostarczalności).
 4. **Konto:** Użytkownicy+role (model org/zespół), Płatności (Stripe, plany, limity).
 5. ✅ **Settings sekwencji 1:1 — ZROBIONE (sekcje Saleshandy).** `SettingsPanel`
    w `campaigns/[id]/page.tsx`: sekcje Ogólne / Konto wysyłkowe / Harmonogram /
