@@ -105,10 +105,18 @@ async def _gemini(
         # Anthropic's server-side web_search tool. (Cannot combine with the
         # JSON response mime type, so json_mode is ignored when searching.)
         body["tools"] = [{"google_search": {}}]
-    elif json_mode:
-        # Force strict JSON output — avoids markdown fences / prose wrappers
-        # that break downstream json.loads.
-        gen_config["responseMimeType"] = "application/json"
+    else:
+        # Gemini 2.5 (flash/pro) has "thinking" ON by default — internal
+        # reasoning tokens are drawn from maxOutputTokens. For our structured
+        # generations a small budget would be spent entirely on thoughts,
+        # leaving NO visible output (finishReason=MAX_TOKENS, empty parts) and
+        # breaking json.loads downstream. Disable thinking so the whole budget
+        # goes to the actual answer.
+        gen_config["thinkingConfig"] = {"thinkingBudget": 0}
+        if json_mode:
+            # Force strict JSON output — avoids markdown fences / prose
+            # wrappers that break downstream json.loads.
+            gen_config["responseMimeType"] = "application/json"
 
     url = _GEMINI_ENDPOINT.format(model=settings.gemini_model)
     try:
@@ -125,13 +133,37 @@ async def _gemini(
         raise RuntimeError(f"Gemini API zwrócił {r.status_code}: {r.text[:200]}")
 
     data = r.json()
+    # A safety block (recitation/safety) yields promptFeedback without
+    # candidates — surface it instead of returning empty text.
+    feedback = data.get("promptFeedback") or {}
     candidates = data.get("candidates") or []
     if not candidates:
-        return ""
-    parts = (candidates[0].get("content") or {}).get("parts") or []
-    return "\n".join(
+        reason = feedback.get("blockReason") or "brak kandydatów"
+        raise RuntimeError(f"Gemini nie zwrócił odpowiedzi ({reason})")
+
+    cand = candidates[0]
+    finish = cand.get("finishReason")
+    parts = (cand.get("content") or {}).get("parts") or []
+    text = "\n".join(
         p["text"] for p in parts if isinstance(p, dict) and p.get("text")
     ).strip()
+    if not text:
+        # Most common cause: MAX_TOKENS reached (budget too small / thinking).
+        # Returning "" would surface as an opaque JSON-parse error upstream.
+        logger.warning(
+            "Gemini empty output (finishReason=%s, max_tokens=%s)",
+            finish,
+            max_tokens,
+        )
+        raise RuntimeError(
+            "Gemini zwrócił pustą odpowiedź"
+            + (
+                " — przekroczono limit tokenów (zwiększ max_tokens)"
+                if finish == "MAX_TOKENS"
+                else f" (finishReason={finish})"
+            )
+        )
+    return text
 
 
 # ---------- Anthropic ----------

@@ -133,7 +133,7 @@ async def synthesize_icp(
         f"PYTANIA I ODPOWIEDZI:\n{qa_block or '(brak)'}"
     )
     text = await llm.generate_text(
-        prompt, max_tokens=1500, quality=True, json_mode=True
+        prompt, max_tokens=4000, quality=True, json_mode=True
     )
     return _parse_json_dict(text, "ICP")
 
