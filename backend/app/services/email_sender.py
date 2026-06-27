@@ -9,7 +9,9 @@ same email may be sent twice on the next tick. Acceptable for MVP, revisit
 with a SELECT FOR UPDATE SKIP LOCKED lease pattern when we add concurrency.
 """
 
+import html as _html
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 
@@ -27,7 +29,7 @@ from app.models.sequence_step import SequenceStep
 from app.services.campaigns import list_variants, pick_variant, render_template
 from app.services.icp import get_or_none as _get_icp
 from app.services.icp import merge_tags as _icp_merge_tags
-from app.services.tracking import open_pixel_url
+from app.services.tracking import click_redirect_url, open_pixel_url
 
 logger = logging.getLogger(__name__)
 
@@ -65,16 +67,47 @@ def smtp_configured() -> bool:
     return bool(settings.smtp_username and settings.smtp_password)
 
 
-def _to_html(body: str, pixel_url: str) -> str:
-    import html as _html
+# Matches bare http(s) URLs; trailing sentence punctuation is trimmed below so
+# "see https://x.com." doesn't capture the period into the link.
+_URL_RE = re.compile(r'https?://[^\s<>"\']+')
+_URL_TRAILING = ".,;:!?)]}\"'"
 
-    esc = _html.escape(body).replace("\n", "<br>\n")
-    return (
-        f"<html><body>{esc}"
-        f'<img src="{pixel_url}" width="1" height="1" alt="" '
-        f'style="display:none">'
-        f"</body></html>"
+
+def _build_html(
+    body: str,
+    *,
+    message_id: int,
+    track_clicks: bool,
+    pixel_url: str | None,
+) -> str:
+    """Render the plain-text body as HTML: escape text, turn bare URLs into
+    links (optionally routed through the click-tracker), append the open pixel
+    when provided."""
+    out: list[str] = []
+    last = 0
+    for m in _URL_RE.finditer(body):
+        url = m.group(0)
+        trail = ""
+        while url and url[-1] in _URL_TRAILING:
+            trail = url[-1] + trail
+            url = url[:-1]
+        out.append(_html.escape(body[last : m.start()]))
+        href = (click_redirect_url(message_id, url) if track_clicks else None) or url
+        out.append(
+            f'<a href="{_html.escape(href, quote=True)}">{_html.escape(url)}</a>'
+        )
+        out.append(_html.escape(trail))
+        last = m.end()
+    out.append(_html.escape(body[last:]))
+    inner = "".join(out).replace("\n", "<br>\n")
+
+    pixel = (
+        f'<img src="{_html.escape(pixel_url, quote=True)}" width="1" '
+        f'height="1" alt="" style="display:none">'
+        if pixel_url
+        else ""
     )
+    return f"<html><body>{inner}{pixel}</body></html>"
 
 
 def _split_addrs(raw: str | None) -> list[str]:
@@ -242,11 +275,17 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
 
         html = None
         # "Send as text only" suppresses the HTML part (better deliverability);
-        # open tracking needs HTML, so text_only wins when both are set.
-        if campaign.track_opens and not campaign.text_only:
-            pixel = open_pixel_url(msg.id)
-            if pixel:
-                html = _to_html(body, pixel)
+        # open/click tracking need HTML, so text_only wins when both are set.
+        if not campaign.text_only and (
+            campaign.track_opens or campaign.track_clicks
+        ):
+            pixel = open_pixel_url(msg.id) if campaign.track_opens else None
+            html = _build_html(
+                body,
+                message_id=msg.id,
+                track_clicks=campaign.track_clicks,
+                pixel_url=pixel,
+            )
 
         try:
             await _send_via_smtp(

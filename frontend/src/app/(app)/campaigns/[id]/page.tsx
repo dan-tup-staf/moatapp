@@ -1024,7 +1024,7 @@ function SettingsPanel({
             checked={trackClicks}
             onChange={setTrackClicks}
             title="Śledź kliknięcia linków"
-            desc="Przepisuje linki przez tracker. (przekierowania kliknięć — wkrótce)"
+            desc="Przepisuje linki w mailu przez podpisany tracker — kliknięcia liczą się per krok i per odbiorca."
           />
           <SettingsToggle
             checked={textOnly}

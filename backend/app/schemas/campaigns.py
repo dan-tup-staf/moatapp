@@ -292,6 +292,7 @@ class StepStats(BaseModel):
     sent_count: int
     failed_count: int
     opened_count: int = 0
+    clicked_count: int = 0
 
 
 class EnrollmentsBreakdown(BaseModel):

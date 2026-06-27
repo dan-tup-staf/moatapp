@@ -255,6 +255,7 @@ function StepCard({
             <div className="hidden shrink-0 gap-5 pl-2 text-center sm:flex">
               <Stat label="Wysłane" value={stats?.sent_count ?? 0} />
               <Stat label="Otwarcia" value={stats?.opened_count ?? 0} />
+              <Stat label="Kliknięcia" value={stats?.clicked_count ?? 0} />
               <Stat label="Błędy" value={stats?.failed_count ?? 0} muted />
             </div>
           </div>

@@ -898,6 +898,9 @@ async def get_campaign_stats(
             func.coalesce(
                 func.sum(case((Message.opened_at.isnot(None), 1), else_=0)), 0
             ),
+            func.coalesce(
+                func.sum(case((Message.clicked_at.isnot(None), 1), else_=0)), 0
+            ),
         )
         .outerjoin(Message, Message.step_id == SequenceStep.id)
         .where(SequenceStep.campaign_id == campaign_id)
@@ -927,6 +930,7 @@ async def get_campaign_stats(
                 "sent_count": int(row[2] or 0),
                 "failed_count": int(row[3] or 0),
                 "opened_count": int(row[4] or 0),
+                "clicked_count": int(row[5] or 0),
             }
             for row in step_rows
         ],

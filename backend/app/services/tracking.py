@@ -1,12 +1,13 @@
-"""Open-tracking helpers — a signed 1x1 pixel.
+"""Open- and click-tracking helpers — a signed 1x1 pixel + signed link redirect.
 
-The pixel URL embeds the message id + an HMAC signature (keyed by jwt_secret)
-so the public endpoint can verify it without a DB token column. Requires
-settings.tracking_base_url (the API's public URL) to be set.
+Both the pixel URL and the click-redirect URL embed the message id + an HMAC
+signature (keyed by jwt_secret) so the public endpoints can verify them without
+a DB token column. Requires settings.tracking_base_url (the API's public URL).
 """
 
 import hashlib
 import hmac
+from urllib.parse import quote
 
 from app.config import settings
 
@@ -30,3 +31,23 @@ def open_pixel_url(message_id: int) -> str | None:
     if not base:
         return None
     return f"{base}/api/v1/track/open/{message_id}-{open_sig(message_id)}.gif"
+
+
+def click_sig(message_id: int) -> str:
+    """Separate HMAC namespace from open_sig so a leaked open pixel can't be
+    replayed as a click (and vice versa)."""
+    return hmac.new(
+        settings.jwt_secret.encode("utf-8"),
+        f"click:{message_id}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()[:16]
+
+
+def click_redirect_url(message_id: int, target_url: str) -> str | None:
+    """Signed redirect that records a click then 302s to `target_url`.
+    Returns None (caller keeps the raw link) when no tracking base is set."""
+    base = (settings.tracking_base_url or "").rstrip("/")
+    if not base:
+        return None
+    u = quote(target_url, safe="")
+    return f"{base}/api/v1/track/click/{message_id}-{click_sig(message_id)}?u={u}"

@@ -334,6 +334,7 @@ export type StepStats = {
   sent_count: number;
   failed_count: number;
   opened_count: number;
+  clicked_count: number;
 };
 
 export type EnrollmentsBreakdown = {
