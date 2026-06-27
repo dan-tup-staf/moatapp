@@ -637,6 +637,38 @@ export type DashboardStats = {
   active_enrollments: number;
 };
 
+export type CampaignResult = {
+  campaign_id: number;
+  name: string;
+  status: string;
+  enrolled: number;
+  sent: number;
+  opened: number;
+  clicked: number;
+  replied: number;
+  bounced: number;
+  open_rate: number;
+  click_rate: number;
+  reply_rate: number;
+};
+
+export type ResultsTotals = {
+  enrolled: number;
+  sent: number;
+  opened: number;
+  clicked: number;
+  replied: number;
+  bounced: number;
+  open_rate: number;
+  click_rate: number;
+  reply_rate: number;
+};
+
+export type ResultsResponse = {
+  totals: ResultsTotals;
+  campaigns: CampaignResult[];
+};
+
 export type HotLead = {
   id: number;
   email: string;
@@ -1166,6 +1198,7 @@ export const api = {
     hotLeads: (limit = 10) =>
       authed<HotLead[]>(`/dashboard/hot-leads?limit=${limit}`),
     pipeline: () => authed<PipelineView>("/dashboard/pipeline"),
+    results: () => authed<ResultsResponse>("/dashboard/results"),
   },
 
   // CRM aggregates (cross-list views for Listy tabs)

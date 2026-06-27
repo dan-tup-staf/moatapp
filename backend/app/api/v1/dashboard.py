@@ -4,7 +4,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db
 from app.deps import get_current_user
 from app.models.user import User
-from app.schemas.dashboard import DashboardStats, HotLeadRead
+from app.schemas.dashboard import (
+    DashboardStats,
+    HotLeadRead,
+    ResultsResponse,
+)
 from app.schemas.pipeline import PipelineView
 from app.services import dashboard as svc
 from app.services import pipeline as pipeline_svc
@@ -19,6 +23,15 @@ async def get_stats(
 ) -> DashboardStats:
     data = await svc.get_stats(db, current.id)
     return DashboardStats(**data)
+
+
+@router.get("/results", response_model=ResultsResponse)
+async def get_results(
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ResultsResponse:
+    data = await svc.get_results(db, current.id)
+    return ResultsResponse(**data)
 
 
 @router.get("/pipeline", response_model=PipelineView)

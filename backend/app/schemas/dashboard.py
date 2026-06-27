@@ -13,6 +13,38 @@ class DashboardStats(BaseModel):
     active_enrollments: int
 
 
+class CampaignResult(BaseModel):
+    campaign_id: int
+    name: str
+    status: str
+    enrolled: int
+    sent: int
+    opened: int
+    clicked: int
+    replied: int
+    bounced: int
+    open_rate: float
+    click_rate: float
+    reply_rate: float
+
+
+class ResultsTotals(BaseModel):
+    enrolled: int
+    sent: int
+    opened: int
+    clicked: int
+    replied: int
+    bounced: int
+    open_rate: float
+    click_rate: float
+    reply_rate: float
+
+
+class ResultsResponse(BaseModel):
+    totals: ResultsTotals
+    campaigns: list[CampaignResult]
+
+
 class HotLeadRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
