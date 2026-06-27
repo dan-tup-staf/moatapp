@@ -41,6 +41,154 @@ def join_tags(tags: list[str]) -> str:
             seen.append(t)
     return ",".join(seen)
 
+
+# ---------- Sequence Score ----------
+
+# Spam-trigger words (PL + EN) that hurt deliverability in cold email.
+_SPAM_WORDS = [
+    "gratis", "za darmo", "darmowy", "darmowe", "promocja", "oferta specjalna",
+    "kup teraz", "kliknij tutaj", "gwarancja", "zarób", "zarabiaj", "okazja",
+    "100%", "wygrałeś", "free", "guarantee", "click here", "buy now",
+    "limited time", "act now", "winner", "cash", "$$$", "!!!", "viagra",
+]
+
+
+def compute_sequence_score(steps: list, campaign) -> dict:
+    """Authoritative Sequence Score (0-100) with a per-factor breakdown,
+    mirroring Saleshandy's quality meter. Pure function of steps + campaign."""
+    email_steps = [s for s in steps if getattr(s, "channel", "email") == "email"]
+    all_text = " ".join(
+        f"{getattr(s, 'subject', '')} {getattr(s, 'body_template', '')}"
+        for s in steps
+    )
+    low = all_text.lower()
+    channels = {getattr(s, "channel", "email") for s in steps}
+
+    factors: list[dict] = []
+
+    # 1. Number of steps (max 20)
+    n = len(steps)
+    pts = 20 if n >= 3 else 12 if n == 2 else 6 if n == 1 else 0
+    factors.append({
+        "key": "steps",
+        "label": "Liczba kroków",
+        "points": pts,
+        "max": 20,
+        "ok": n >= 3,
+        "hint": "3+ kroków daje najlepszą skuteczność" if n < 3
+        else f"{n} kroków — dobrze",
+    })
+
+    # 2. Follow-ups (max 10)
+    follow = max(0, len(email_steps) - 1)
+    pts = 10 if follow >= 2 else 6 if follow == 1 else 0
+    factors.append({
+        "key": "followups",
+        "label": "Follow-upy",
+        "points": pts,
+        "max": 10,
+        "ok": follow >= 1,
+        "hint": "Dodaj follow-upy — większość odpowiedzi przychodzi po nich"
+        if follow == 0 else f"{follow} follow-up(ów)",
+    })
+
+    # 3. Personalization (merge tags) (max 20)
+    has_tags = bool(re.search(r"\{\{", all_text))
+    factors.append({
+        "key": "personalization",
+        "label": "Personalizacja (merge-tagi)",
+        "points": 20 if has_tags else 0,
+        "max": 20,
+        "ok": has_tags,
+        "hint": "Użyj {{first_name}}, {{company}} itd." if not has_tags
+        else "Merge-tagi obecne",
+    })
+
+    # 4. Spintax (max 10)
+    has_spin = bool(re.search(r"\{spin", low))
+    factors.append({
+        "key": "spintax",
+        "label": "Spintax",
+        "points": 10 if has_spin else 0,
+        "max": 10,
+        "ok": has_spin,
+        "hint": "Dodaj {spin A|B endspin} dla lepszej dostarczalności"
+        if not has_spin else "Spintax obecny",
+    })
+
+    # 5. Subject length (max 10) — avg subject word count between 3 and 9
+    subjects = [getattr(s, "subject", "") for s in email_steps if getattr(s, "subject", "")]
+    if subjects:
+        avg_words = sum(len(s.split()) for s in subjects) / len(subjects)
+        good = 3 <= avg_words <= 9
+        pts = 10 if good else 5
+    else:
+        avg_words = 0
+        good = False
+        pts = 0
+    factors.append({
+        "key": "subject",
+        "label": "Długość tematu",
+        "points": pts,
+        "max": 10,
+        "ok": good,
+        "hint": "Krótkie tematy (3-9 słów) mają wyższe open rate"
+        if not good else f"Średnio {avg_words:.0f} słów — dobrze",
+    })
+
+    # 6. No spam words (max 15)
+    found = [w for w in _SPAM_WORDS if w in low]
+    pts = 15 if not found else max(0, 15 - 5 * len(found))
+    factors.append({
+        "key": "spam",
+        "label": "Brak spam words",
+        "points": pts,
+        "max": 15,
+        "ok": not found,
+        "hint": f"Wykryto: {', '.join(found[:5])}" if found
+        else "Brak słów-wyzwalaczy spamu",
+    })
+
+    # 7. Unsubscribe footer (max 5)
+    unsub = bool(getattr(campaign, "include_unsubscribe", False))
+    factors.append({
+        "key": "unsubscribe",
+        "label": "Stopka wypisu",
+        "points": 5 if unsub else 0,
+        "max": 5,
+        "ok": unsub,
+        "hint": "Włącz stopkę wypisu (wymagana prawnie)" if not unsub
+        else "Stopka wypisu włączona",
+    })
+
+    # 8. Open tracking (max 5)
+    track = bool(getattr(campaign, "track_opens", False))
+    factors.append({
+        "key": "tracking",
+        "label": "Śledzenie otwarć",
+        "points": 5 if track else 0,
+        "max": 5,
+        "ok": track,
+        "hint": "Włącz śledzenie otwarć, by mierzyć zaangażowanie"
+        if not track else "Śledzenie otwarć włączone",
+    })
+
+    # 9. Multi-channel (max 5)
+    multi = len(channels) >= 2
+    factors.append({
+        "key": "multichannel",
+        "label": "Multi-channel",
+        "points": 5 if multi else 0,
+        "max": 5,
+        "ok": multi,
+        "hint": "Dodaj krok LinkedIn/Telefon dla multi-touch" if not multi
+        else "Sekwencja wielokanałowa",
+    })
+
+    score = sum(f["points"] for f in factors)
+    return {"score": min(100, score), "max_score": 100, "factors": factors}
+
+
 # ---------- Campaigns ----------
 
 

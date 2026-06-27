@@ -329,6 +329,21 @@ class ProspectFunnel(BaseModel):
     out_of_office: int = 0
 
 
+class ScoreFactor(BaseModel):
+    key: str
+    label: str
+    points: int
+    max: int
+    ok: bool
+    hint: str
+
+
+class SequenceScore(BaseModel):
+    score: int
+    max_score: int = 100
+    factors: list[ScoreFactor]
+
+
 class CampaignStats(BaseModel):
     """Per-step + overall metrics for the lemlist-style detail view."""
 

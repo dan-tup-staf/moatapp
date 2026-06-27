@@ -12,6 +12,7 @@ import {
   Send as SendIcon,
   Settings2,
   Users2,
+  XCircle,
 } from "lucide-react";
 
 import {
@@ -28,6 +29,7 @@ import {
   Enrollment,
   LeadList,
   PreviewResponse,
+  SequenceScore,
   SequenceStep,
   SignalSummary,
   StepChannel,
@@ -124,6 +126,78 @@ function SeqScoreBadge({ score }: { score: number }) {
   );
 }
 
+function ScoreBreakdown({
+  score,
+  onClose,
+}: {
+  score: SequenceScore;
+  onClose: () => void;
+}) {
+  const tone =
+    score.score >= 80
+      ? "text-emerald-600"
+      : score.score >= 50
+        ? "text-amber-600"
+        : "text-red-600";
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900">
+            Sequence Score{" "}
+            <span className={`ml-1 font-bold ${tone}`}>
+              {score.score}/{score.max_score}
+            </span>
+          </h3>
+          <p className="mt-0.5 text-xs text-gray-500">
+            Jakość sekwencji — popraw pozycje z minusem, by zwiększyć wynik.
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="text-xs text-gray-500 hover:text-gray-900"
+        >
+          Zwiń
+        </button>
+      </div>
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {score.factors.map((f) => (
+          <div
+            key={f.key}
+            className="flex items-start gap-2 rounded-lg border border-gray-100 bg-gray-50/50 p-2.5"
+          >
+            {f.ok ? (
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+            ) : (
+              <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-gray-300" />
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium text-gray-800">
+                  {f.label}
+                </span>
+                <span
+                  className={
+                    "shrink-0 font-mono text-xs " +
+                    (f.points === f.max
+                      ? "text-emerald-600"
+                      : f.points === 0
+                        ? "text-gray-400"
+                        : "text-amber-600")
+                  }
+                >
+                  {f.points}/{f.max}
+                </span>
+              </div>
+              <p className="mt-0.5 text-xs text-gray-500">{f.hint}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SeqTabs({
   tab,
   onChange,
@@ -177,6 +251,8 @@ export default function CampaignDetailPage() {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [lists, setLists] = useState<LeadList[]>([]);
   const [stats, setStats] = useState<CampaignStats | null>(null);
+  const [score, setScore] = useState<SequenceScore | null>(null);
+  const [showScore, setShowScore] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const [selectedStepId, setSelectedStepId] = useState<number | null>(null);
@@ -194,13 +270,14 @@ export default function CampaignDetailPage() {
 
   async function refresh() {
     try {
-      const [c, s, e, l, st, srcs] = await Promise.all([
+      const [c, s, e, l, st, srcs, sc] = await Promise.all([
         api.campaigns.get(campaignId),
         api.campaigns.listSteps(campaignId),
         api.campaigns.listEnrollments(campaignId),
         api.lists.list(),
         api.campaigns.stats(campaignId),
         api.signals.summary(),
+        api.campaigns.score(campaignId).catch(() => null),
       ]);
       setCampaign(c);
       setSteps(s);
@@ -208,6 +285,7 @@ export default function CampaignDetailPage() {
       setLists(l);
       setStats(st);
       setSources(srcs);
+      setScore(sc);
       if (s.length > 0 && selectedStepId === null) {
         setSelectedStepId(s[0].id);
       }
@@ -280,18 +358,7 @@ export default function CampaignDetailPage() {
     [steps, selectedStepId],
   );
 
-  const seqScore = useMemo(() => {
-    if (!campaign) return 0;
-    let s = 30;
-    if (steps.length >= 1) s += 15;
-    if (steps.length >= 3) s += 15;
-    const text = steps.map((x) => `${x.subject} ${x.body_template}`).join(" ");
-    if (/\{\{/.test(text)) s += 15;
-    if (/\{spin/i.test(text)) s += 10;
-    if (campaign.include_unsubscribe) s += 10;
-    if (campaign.track_opens) s += 5;
-    return Math.min(100, s);
-  }, [steps, campaign]);
+  const seqScore = score?.score ?? 0;
 
   if (loading) return <p className="text-sm text-gray-500">Ładowanie...</p>;
   if (!campaign) return null;
@@ -313,7 +380,13 @@ export default function CampaignDetailPage() {
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <SeqScoreBadge score={seqScore} />
+            <button
+              onClick={() => setShowScore((v) => !v)}
+              title="Sequence Score — kliknij, by zobaczyć rozbicie"
+              className="rounded-full transition hover:opacity-80"
+            >
+              <SeqScoreBadge score={seqScore} />
+            </button>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h2 className="truncate text-2xl font-bold tracking-tight">
@@ -386,6 +459,10 @@ export default function CampaignDetailPage() {
               muted={stats.messages_failed_total === 0}
             />
           </div>
+        )}
+
+        {showScore && score && (
+          <ScoreBreakdown score={score} onClose={() => setShowScore(false)} />
         )}
 
         <SeqTabs

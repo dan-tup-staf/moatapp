@@ -25,6 +25,7 @@ from app.schemas.campaigns import (
     EnrollResult,
     PreviewRequest,
     PreviewResponse,
+    SequenceScore,
     StepCreate,
     StepRead,
     StepTestSendRequest,
@@ -476,6 +477,17 @@ async def get_stats(
     await _ensure_owned_campaign(db, current, campaign_id)
     data = await svc.get_campaign_stats(db, campaign_id)
     return CampaignStats(**data)
+
+
+@router.get("/{campaign_id}/score", response_model=SequenceScore)
+async def get_score(
+    campaign_id: int,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SequenceScore:
+    campaign = await _ensure_owned_campaign(db, current, campaign_id)
+    steps = await svc.list_steps(db, campaign_id)
+    return SequenceScore(**svc.compute_sequence_score(steps, campaign))
 
 
 @router.post("/{campaign_id}/send-due-now")

@@ -369,6 +369,21 @@ export type ProspectFunnel = {
   out_of_office: number;
 };
 
+export type ScoreFactor = {
+  key: string;
+  label: string;
+  points: number;
+  max: number;
+  ok: boolean;
+  hint: string;
+};
+
+export type SequenceScore = {
+  score: number;
+  max_score: number;
+  factors: ScoreFactor[];
+};
+
 export type CampaignStats = {
   enrollments: EnrollmentsBreakdown;
   messages_sent_total: number;
@@ -937,6 +952,9 @@ export const api = {
 
     stats: (campaignId: number) =>
       authed<CampaignStats>(`/campaigns/${campaignId}/stats`),
+
+    score: (campaignId: number) =>
+      authed<SequenceScore>(`/campaigns/${campaignId}/score`),
 
     audiencePreview: (campaignId: number, criteria: AudienceCriteria) =>
       authed<AudiencePreview>(`/campaigns/${campaignId}/audience/preview`, {
