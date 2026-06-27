@@ -166,7 +166,9 @@ class WebSearchScraper(BaseScraper):
             "linków."
         )
         try:
-            return await llm.web_search_text(prompt, max_tokens=2500)
+            # Generous budget: grounded models spend output tokens on internal
+            # reasoning, so a tight cap can yield an empty (MAX_TOKENS) result.
+            return await llm.web_search_text(prompt, max_tokens=4000)
         except Exception as e:
             logger.exception("web_search (%s) failed for %r", self.channel, query)
             raise RuntimeError(

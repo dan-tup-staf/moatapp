@@ -136,6 +136,34 @@ export default function SignalSourcesPage() {
 
   const [running, setRunning] = useState<number | null>(null);
   const [runMsg, setRunMsg] = useState<string | null>(null);
+  const [runningAll, setRunningAll] = useState(false);
+
+  async function runAll() {
+    setRunningAll(true);
+    setRunMsg(null);
+    setError(null);
+    try {
+      const res = await api.signalSources.runAll();
+      if (res.ran === 0) {
+        setRunMsg("Brak włączonych źródeł do uruchomienia.");
+      } else {
+        const errs = res.results.filter((r) => r.error);
+        let msg = `Uruchomiono ${res.ran} źródeł — ${res.total_new_signals} nowych sygnałów.`;
+        if (errs.length) {
+          msg += ` Błędy (${errs.length}): ${errs
+            .map((e) => `${e.name}: ${e.error}`)
+            .slice(0, 2)
+            .join(" · ")}`;
+        }
+        setRunMsg(msg);
+      }
+      await refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Błąd uruchamiania");
+    } finally {
+      setRunningAll(false);
+    }
+  }
 
   async function refresh() {
     setLoading(true);
@@ -301,13 +329,23 @@ export default function SignalSourcesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Źródła sygnałów</h2>
-        <p className="mt-1 text-sm text-gray-600">
-          Konfigurowalne scrapery intent data — worker odpala je co 15 min.
-          Kanały web (LinkedIn, Google News, X, SERP, funding) działają przez
-          Claude web_search.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">Źródła sygnałów</h2>
+          <p className="mt-1 max-w-2xl text-sm text-gray-600">
+            Konfigurowalne scrapery intent data. Kanały web (LinkedIn, Google
+            News, X, SERP, funding) działają przez AI/web-search. Kliknij
+            „Uruchom wszystkie", aby od razu zaciągnąć sygnały.
+          </p>
+        </div>
+        <button
+          onClick={runAll}
+          disabled={runningAll || sources.length === 0}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+        >
+          <Play className="h-4 w-4" />
+          {runningAll ? "Zaciągam…" : "Uruchom wszystkie"}
+        </button>
       </div>
 
       {/* Tab switcher */}

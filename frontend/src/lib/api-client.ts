@@ -524,6 +524,18 @@ export type RunResult = {
   error: string | null;
 };
 
+export type SourceRunItem = {
+  name: string;
+  new_signals: number;
+  error: string | null;
+};
+
+export type RunAllResult = {
+  ran: number;
+  total_new_signals: number;
+  results: SourceRunItem[];
+};
+
 export type SignalSourcePreset = {
   key: string;
   category: string;
@@ -1069,6 +1081,9 @@ export const api = {
 
     runNow: (id: number) =>
       authed<RunResult>(`/signal-sources/${id}/run-now`, { method: "POST" }),
+
+    runAll: () =>
+      authed<RunAllResult>(`/signal-sources/run-all`, { method: "POST" }),
   },
 
   // Signals feed

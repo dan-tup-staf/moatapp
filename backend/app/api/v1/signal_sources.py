@@ -5,6 +5,7 @@ from app.db import get_db
 from app.deps import get_current_user
 from app.models.user import User
 from app.schemas.signals import (
+    RunAllResult,
     RunResult,
     SignalSourceBatchCreate,
     SignalSourceCreate,
@@ -140,3 +141,13 @@ async def run_now(
     obj = await _ensure_owned(db, current, source_id)
     new_count = await svc.run_source(db, obj)
     return RunResult(new_signals=new_count, error=obj.last_error)
+
+
+@router.post("/run-all", response_model=RunAllResult)
+async def run_all(
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> RunAllResult:
+    """Run every enabled source for the current user and report per-source
+    results — the "Uruchom wszystkie" button on the Źródła sygnałów screen."""
+    return await svc.run_user_sources(db, current.id)

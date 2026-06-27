@@ -384,6 +384,39 @@ async def _finalize_source(
     await db.commit()
 
 
+async def run_user_sources(db: AsyncSession, user_id: int) -> dict:
+    """Run every enabled source for one user (the "Uruchom wszystkie" button).
+    Returns an aggregate + per-source breakdown so the UI can show what each
+    source produced or why it failed."""
+    rows = (
+        await db.execute(
+            select(SignalSource).where(
+                SignalSource.user_id == user_id,
+                SignalSource.enabled.is_(True),
+            )
+        )
+    ).scalars().all()
+
+    results: list[dict] = []
+    total_new = 0
+    for src in rows:
+        name = src.name
+        try:
+            new = await run_source(db, src)
+            total_new += new
+            results.append({"name": name, "new_signals": new, "error": None})
+        except Exception as e:  # noqa: BLE001 — report per-source, keep going
+            logger.exception("run_user_sources: source %s failed", src.id)
+            results.append(
+                {"name": name, "new_signals": 0, "error": str(e)[:300]}
+            )
+    return {
+        "ran": len(rows),
+        "total_new_signals": total_new,
+        "results": results,
+    }
+
+
 async def run_all_enabled_sources() -> int:
     """Worker entry point — fetch all enabled sources and run each in its own
     session to isolate failures. Returns total NEW signals across all sources."""

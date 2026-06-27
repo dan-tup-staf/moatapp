@@ -59,6 +59,18 @@ class RunResult(BaseModel):
     error: str | None = None
 
 
+class SourceRunItem(BaseModel):
+    name: str
+    new_signals: int
+    error: str | None = None
+
+
+class RunAllResult(BaseModel):
+    ran: int
+    total_new_signals: int
+    results: list[SourceRunItem]
+
+
 # ---------- Presets (curated PL-enterprise source templates) ----------
 
 
