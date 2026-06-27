@@ -1,6 +1,21 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import {
+  Banknote,
+  Bell,
+  Briefcase,
+  Globe,
+  type LucideIcon,
+  MessageCircle,
+  Newspaper,
+  Play,
+  Power,
+  Rss,
+  Search,
+  Trash2,
+  Users,
+} from "lucide-react";
 
 import {
   api,
@@ -21,6 +36,28 @@ const TYPE_LABELS: Record<SourceType, string> = {
   serp: "SERP",
   funding: "Bazy fundingowe",
   company_site: "Strona firmowa",
+};
+
+const TYPE_ICONS: Record<SourceType, LucideIcon> = {
+  rss: Rss,
+  pracuj_pl: Briefcase,
+  linkedin: Users,
+  google_news: Newspaper,
+  x_twitter: MessageCircle,
+  serp: Search,
+  funding: Banknote,
+  company_site: Globe,
+};
+
+const TYPE_ACCENTS: Record<SourceType, string> = {
+  rss: "bg-orange-100 text-orange-700",
+  pracuj_pl: "bg-indigo-100 text-indigo-700",
+  linkedin: "bg-blue-100 text-blue-700",
+  google_news: "bg-rose-100 text-rose-700",
+  x_twitter: "bg-sky-100 text-sky-700",
+  serp: "bg-emerald-100 text-emerald-700",
+  funding: "bg-violet-100 text-violet-700",
+  company_site: "bg-gray-100 text-gray-700",
 };
 
 // web_search-backed channels (Claude server-side web_search)
@@ -540,86 +577,106 @@ export default function SignalSourcesPage() {
             Brak źródeł. Dodaj pierwsze powyżej lub aktywuj presety.
           </p>
         ) : (
-          <ul className="divide-y divide-gray-200">
-            {sources.map((s) => (
-              <li key={s.id} className="p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-gray-900">
-                        {s.name}
-                      </span>
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
-                        {TYPE_LABELS[s.type] ?? s.type}
-                      </span>
-                      {!s.enabled && (
-                        <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">
-                          wyłączone
-                        </span>
-                      )}
-                    </div>
+          <ul className="divide-y divide-gray-100">
+            {sources.map((s) => {
+              const Icon = TYPE_ICONS[s.type] ?? Bell;
+              return (
+                <li key={s.id} className="p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex min-w-0 flex-1 gap-3">
+                      <div
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                          TYPE_ACCENTS[s.type] ?? "bg-gray-100 text-gray-700"
+                        } ${s.enabled ? "" : "opacity-50"}`}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-gray-900">
+                            {s.name}
+                          </span>
+                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-600">
+                            {TYPE_LABELS[s.type] ?? s.type}
+                          </span>
+                          {!s.enabled && (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] text-amber-800">
+                              wyłączone
+                            </span>
+                          )}
+                        </div>
 
-                    {/* Type-specific config preview */}
-                    {s.type === "rss" &&
-                      typeof s.config.feed_url === "string" && (
-                        <p className="mt-1 truncate font-mono text-xs text-gray-500">
-                          {s.config.feed_url as string}
-                        </p>
-                      )}
-                    {s.type === "pracuj_pl" &&
-                      Array.isArray(s.config.keywords) && (
-                        <p className="mt-1 text-xs text-gray-500">
-                          keywords:{" "}
-                          {(s.config.keywords as string[])
-                            .map((k) => `"${k}"`)
-                            .join(", ")}
-                        </p>
-                      )}
-                    {typeof s.config.query === "string" && (
-                      <p className="mt-1 truncate font-mono text-xs text-gray-500">
-                        query: {s.config.query as string}
-                      </p>
-                    )}
+                        {/* Type-specific config preview */}
+                        {s.type === "rss" &&
+                          typeof s.config.feed_url === "string" && (
+                            <p className="mt-1 truncate font-mono text-xs text-gray-500">
+                              {s.config.feed_url as string}
+                            </p>
+                          )}
+                        {s.type === "pracuj_pl" &&
+                          Array.isArray(s.config.keywords) && (
+                            <p className="mt-1 text-xs text-gray-500">
+                              keywords:{" "}
+                              {(s.config.keywords as string[])
+                                .map((k) => `"${k}"`)
+                                .join(", ")}
+                            </p>
+                          )}
+                        {typeof s.config.query === "string" && (
+                          <p className="mt-1 truncate font-mono text-xs text-gray-500">
+                            query: {s.config.query as string}
+                          </p>
+                        )}
 
-                    <div className="mt-1 flex flex-wrap gap-3 text-xs text-gray-500">
-                      <span>weight: {s.score_weight}</span>
-                      <span>{s.signals_count} sygnałów</span>
-                      <span>
-                        {s.last_run_at
-                          ? `ostatnio: ${new Date(s.last_run_at).toLocaleString("pl-PL")}`
-                          : "nigdy nie odpalone"}
-                      </span>
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-gray-600">
+                            waga {s.score_weight}
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-gray-600">
+                            <Bell className="h-3 w-3" />
+                            {s.signals_count} sygnałów
+                          </span>
+                          <span className="text-gray-400">
+                            {s.last_run_at
+                              ? `ostatnio: ${new Date(s.last_run_at).toLocaleString("pl-PL")}`
+                              : "nigdy nie odpalone"}
+                          </span>
+                        </div>
+                        {s.last_error && (
+                          <p className="mt-1 text-xs text-red-600">
+                            ostatni błąd: {s.last_error}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    {s.last_error && (
-                      <p className="mt-1 text-xs text-red-600">
-                        ostatni błąd: {s.last_error}
-                      </p>
-                    )}
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        onClick={() => handleRunNow(s.id)}
+                        disabled={running === s.id}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium hover:bg-gray-100 disabled:opacity-50"
+                      >
+                        <Play className="h-3.5 w-3.5" />
+                        {running === s.id ? "Pobieram…" : "Uruchom"}
+                      </button>
+                      <button
+                        onClick={() => handleToggle(s)}
+                        title={s.enabled ? "Wyłącz" : "Włącz"}
+                        className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                      >
+                        <Power className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(s)}
+                        title="Usuń źródło"
+                        className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex shrink-0 flex-col gap-2 text-right">
-                    <button
-                      onClick={() => handleRunNow(s.id)}
-                      disabled={running === s.id}
-                      className="rounded-md border border-gray-300 px-3 py-1 text-xs hover:bg-gray-100 disabled:opacity-50"
-                    >
-                      {running === s.id ? "Pobieram..." : "Uruchom teraz"}
-                    </button>
-                    <button
-                      onClick={() => handleToggle(s)}
-                      className="text-xs text-gray-600 hover:underline"
-                    >
-                      {s.enabled ? "Wyłącz" : "Włącz"}
-                    </button>
-                    <button
-                      onClick={() => handleDelete(s)}
-                      className="text-xs text-red-600 hover:underline"
-                    >
-                      Usuń
-                    </button>
-                  </div>
-                </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
