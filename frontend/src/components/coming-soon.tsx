@@ -1,4 +1,4 @@
-import { Sparkles } from "lucide-react";
+import { CircleDot, Sparkles } from "lucide-react";
 
 export type PlannedFeature = { title: string; desc: string };
 
@@ -20,7 +20,7 @@ export function ComingSoon({
         <p className="mt-1 text-sm text-gray-600">{subtitle}</p>
       </div>
 
-      <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
         <Sparkles className="h-4 w-4 shrink-0" />
         <span>
           <span className="font-medium">W budowie.</span>{" "}
@@ -33,10 +33,13 @@ export function ComingSoon({
         {features.map((f) => (
           <div
             key={f.title}
-            className="rounded-lg border border-gray-200 bg-white p-4"
+            className="flex gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
           >
-            <h3 className="text-sm font-semibold text-gray-900">{f.title}</h3>
-            <p className="mt-1 text-sm text-gray-600">{f.desc}</p>
+            <CircleDot className="mt-0.5 h-4 w-4 shrink-0 text-gray-300" />
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">{f.title}</h3>
+              <p className="mt-1 text-sm text-gray-600">{f.desc}</p>
+            </div>
           </div>
         ))}
       </div>
