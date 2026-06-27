@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Bell,
+  Briefcase,
   Building2,
   ChevronsLeft,
   ChevronsRight,
@@ -54,6 +55,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/groups", label: "Kampanie", icon: Megaphone },
       { href: "/campaigns", label: "Sekwencje", icon: Send },
+      { href: "/linkedin", label: "LinkedIn", icon: Briefcase },
     ],
   },
   {

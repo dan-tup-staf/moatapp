@@ -4,6 +4,7 @@ from app.models.email_account import EmailAccount
 from app.models.icp_profile import IcpProfile
 from app.models.lead import Lead
 from app.models.lead_list import LeadList
+from app.models.linkedin_account import LinkedInAccount
 from app.models.message import Message
 from app.models.sequence_branch import SequenceBranch
 from app.models.sequence_step import SequenceStep
@@ -24,4 +25,5 @@ __all__ = [
     "SignalSource",
     "Signal",
     "IcpProfile",
+    "LinkedInAccount",
 ]

@@ -111,6 +111,36 @@ export type EmailAccountUpdate = {
 
 export type EmailAccountTestResult = { ok: boolean; detail: string };
 
+export type LinkedInAccount = {
+  id: number;
+  name: string | null;
+  member_urn: string | null;
+  has_session: boolean;
+  proxy_url: string | null;
+  status: "disconnected" | "connected" | "error";
+  last_check_at: string | null;
+  last_error: string | null;
+  daily_limit_invites: number;
+  daily_limit_messages: number;
+  active: boolean;
+  created_at: string;
+};
+
+export type LinkedInAccountCreate = {
+  name?: string | null;
+  li_at: string;
+  jsessionid: string;
+  proxy_url?: string | null;
+  daily_limit_invites?: number;
+  daily_limit_messages?: number;
+};
+
+export type LinkedInAccountUpdate = Partial<LinkedInAccountCreate> & {
+  active?: boolean;
+};
+
+export type LinkedInTestResult = { ok: boolean; detail: string };
+
 export type EmailAccountSetup = {
   domain: string;
   score: number;
@@ -829,6 +859,27 @@ export const api = {
       authed<EmailAccountSetup>(`/email-accounts/${id}/setup`),
     test: (id: number) =>
       authed<EmailAccountTestResult>(`/email-accounts/${id}/test`, {
+        method: "POST",
+      }),
+  },
+
+  // LinkedIn accounts (Voyager-based outreach)
+  linkedinAccounts: {
+    list: () => authed<LinkedInAccount[]>("/linkedin-accounts"),
+    create: (data: LinkedInAccountCreate) =>
+      authed<LinkedInAccount>("/linkedin-accounts", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    update: (id: number, data: LinkedInAccountUpdate) =>
+      authed<LinkedInAccount>(`/linkedin-accounts/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    delete: (id: number) =>
+      authed<void>(`/linkedin-accounts/${id}`, { method: "DELETE" }),
+    test: (id: number) =>
+      authed<LinkedInTestResult>(`/linkedin-accounts/${id}/test`, {
         method: "POST",
       }),
   },
