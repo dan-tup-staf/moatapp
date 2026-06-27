@@ -401,10 +401,22 @@ async def update_fields(
     db: AsyncSession, user_id: int, update: IcpFieldsUpdate
 ) -> IcpProfile | None:
     obj = await get_or_none(db, user_id)
-    if obj is None:
-        return None
-    current = dict(obj.icp_fields or {})
     data = update.model_dump(exclude_unset=True)
+    if obj is None:
+        # Manual creation path — user builds the client profile by hand
+        # without going through the URL-analysis / synthesis flow.
+        obj = IcpProfile(
+            user_id=user_id,
+            source_url=None,
+            scraped_summary=None,
+            qa_history=[],
+            icp_fields=data,
+        )
+        db.add(obj)
+        await db.commit()
+        await db.refresh(obj)
+        return obj
+    current = dict(obj.icp_fields or {})
     current.update(data)
     obj.icp_fields = current
     await db.commit()

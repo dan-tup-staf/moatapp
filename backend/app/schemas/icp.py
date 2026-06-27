@@ -93,3 +93,6 @@ class IcpFieldsUpdate(BaseModel):
     pain_points: list[str] | None = None
     triggers: list[str] | None = None
     notes: str | None = None
+    # Rich client profile — user-editable company details + buying committee.
+    company: CompanyProfile | None = None
+    personas: list[Persona] | None = None

@@ -681,6 +681,8 @@ export type IcpFieldsUpdate = Partial<{
   pain_points: string[];
   triggers: string[];
   notes: string;
+  company: CompanyProfile;
+  personas: Persona[];
 }>;
 
 // ---------- Errors ----------

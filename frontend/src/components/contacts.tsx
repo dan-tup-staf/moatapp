@@ -18,6 +18,7 @@ import {
   api,
   ApiError,
   CompanyRow,
+  IcpFields,
   IcpProfile,
   IcpQA,
   LeadList,
@@ -25,7 +26,23 @@ import {
   SourceType,
   SuggestedSource,
 } from "@/lib/api-client";
-import { ClientProfileView } from "@/components/client-profile";
+import { ClientProfileSection } from "@/components/client-profile-editor";
+
+const EMPTY_ICP_FIELDS: IcpFields = {
+  target_industries: [],
+  company_size: "",
+  buyer_persona_titles: [],
+  pain_points: [],
+  triggers: [],
+  notes: "",
+  company: {
+    employees: "",
+    industry: "",
+    recruitments_per_year: "",
+    hr_employees: "",
+  },
+  personas: [],
+};
 
 // ---------- Listy panel ----------
 
@@ -727,6 +744,7 @@ export function IcpPanel() {
   const [synthesizing, setSynthesizing] = useState(false);
 
   const [saving, setSaving] = useState(false);
+  const [manualCreate, setManualCreate] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -820,6 +838,20 @@ export function IcpPanel() {
     (icp.icp_fields.target_industries.length > 0 ||
       icp.icp_fields.buyer_persona_titles.length > 0 ||
       icp.icp_fields.company_size);
+  const co = icp?.icp_fields?.company;
+  const hasRichProfile =
+    !!icp?.icp_fields &&
+    (((icp.icp_fields.personas ?? []).length > 0) ||
+      (!!co &&
+        !!(
+          co.employees ||
+          co.industry ||
+          co.recruitments_per_year ||
+          co.hr_employees
+        )));
+  // Show the profile workspace (rich editor + flat ICP editor) whenever there
+  // is any synthesized/manual data, or the user chose to create one by hand.
+  const showProfile = !!hasIcp || hasRichProfile || manualCreate;
 
   return (
     <div className="space-y-6">
@@ -829,8 +861,34 @@ export function IcpPanel() {
         </p>
       )}
 
-      {!hasScraped ? (
-        // Stage 1: Empty — URL lub manual description
+      {showProfile ? (
+        // Stage 3 / profile workspace: editable client profile + (when an AI
+        // ICP exists) the flat ICP editor + signal discovery.
+        <>
+          <ClientProfileSection
+            fields={icp?.icp_fields ?? EMPTY_ICP_FIELDS}
+            saving={saving}
+            onSave={handleSaveFields}
+            initialEditing={manualCreate && !hasRichProfile}
+          />
+          {(hasIcp || hasScraped) && (
+            <>
+              <IcpEditor
+                icp={icp!}
+                saving={saving}
+                onSave={handleSaveFields}
+                onReset={handleReset}
+                onRegenerate={handleSynthesize}
+                regenerating={synthesizing}
+                qa={qa}
+              />
+              <DiscoveryPanel />
+            </>
+          )}
+        </>
+      ) : !hasScraped ? (
+        // Stage 1: Empty — URL / manual description / build profile by hand
+        <>
         <form
           onSubmit={handleAnalyze}
           className="space-y-3 rounded-lg border border-gray-200 bg-white p-6"
@@ -913,7 +971,19 @@ export function IcpPanel() {
             {analyzing ? "Analizuję..." : "Analizuj"}
           </button>
         </form>
-      ) : !hasIcp ? (
+        <div className="flex items-center gap-3 text-xs text-gray-400">
+          <div className="h-px flex-1 bg-gray-200" />
+          albo
+          <div className="h-px flex-1 bg-gray-200" />
+        </div>
+        <button
+          onClick={() => setManualCreate(true)}
+          className="w-full rounded-lg border border-dashed border-gray-300 bg-white px-4 py-4 text-sm font-medium text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
+        >
+          Stwórz profil klienta ręcznie — bez analizy AI →
+        </button>
+        </>
+      ) : (
         // Stage 2: Questions
         <div className="space-y-4">
           <div className="rounded-lg border border-gray-200 bg-white p-4 text-xs text-gray-600">
@@ -973,21 +1043,6 @@ export function IcpPanel() {
             </button>
           </div>
         </div>
-      ) : (
-        // Stage 3: Editable ICP + dedicated-signals discovery
-        <>
-          <IcpEditor
-            icp={icp!}
-            saving={saving}
-            onSave={handleSaveFields}
-            onReset={handleReset}
-            onRegenerate={handleSynthesize}
-            regenerating={synthesizing}
-            qa={qa}
-          />
-          <ClientProfileView fields={icp!.icp_fields} />
-          <DiscoveryPanel />
-        </>
       )}
     </div>
   );
