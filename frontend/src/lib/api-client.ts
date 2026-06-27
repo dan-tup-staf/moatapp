@@ -80,6 +80,9 @@ export type EmailAccount = {
   daily_limit: number;
   tags: string[];
   warmup_status: WarmupStatus;
+  warmup_started_at: string | null;
+  warmup_day: number;
+  effective_daily_limit: number;
   active: boolean;
   created_at: string;
 };

@@ -72,6 +72,10 @@ class EmailAccount(Base):
     warmup_status: Mapped[str] = mapped_column(
         String(32), nullable=False, server_default="off"
     )
+    # When the current warm-up ramp started (drives the daily volume schedule).
+    warmup_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true"
     )

@@ -70,6 +70,9 @@ class EmailAccountRead(BaseModel):
     daily_limit: int
     tags: list[str] = Field(default_factory=list)
     warmup_status: WarmupStatus
+    warmup_started_at: datetime | None = None
+    warmup_day: int = 0
+    effective_daily_limit: int = 0
     active: bool
     created_at: datetime
 

@@ -66,11 +66,18 @@ async def create_account(
 async def update_account(
     db: AsyncSession, account: EmailAccount, payload: EmailAccountUpdate
 ) -> EmailAccount:
+    from datetime import datetime, timezone
+
     data = payload.model_dump(exclude_unset=True)
     if "tags" in data and data["tags"] is not None:
         account.tags = join_tags(data.pop("tags"))
     if "warmup_status" in data and hasattr(data.get("warmup_status"), "value"):
         data["warmup_status"] = data["warmup_status"].value
+    # Starting warm-up (re)starts the ramp clock.
+    if data.get("warmup_status") == "warming" and (
+        account.warmup_status != "warming" or account.warmup_started_at is None
+    ):
+        account.warmup_started_at = datetime.now(timezone.utc)
     if "smtp_security" in data and hasattr(data.get("smtp_security"), "value"):
         data["smtp_security"] = data["smtp_security"].value
     # A new password replaces the stored ciphertext; changing creds invalidates
@@ -118,6 +125,36 @@ async def test_account(db: AsyncSession, account: EmailAccount) -> tuple[bool, s
 
 def tags_list(account: EmailAccount) -> list[str]:
     return split_tags(account.tags)
+
+
+# ---------- Warm-up ramp ----------
+
+# A warming mailbox starts low and grows each day so a fresh domain/IP builds
+# reputation gradually instead of blasting at full volume on day one.
+WARMUP_START_VOLUME = 5
+WARMUP_DAILY_STEP = 5
+
+
+def warmup_day(account: EmailAccount) -> int:
+    """0-based day index since the ramp started (0 if not warming)."""
+    from datetime import datetime, timezone
+
+    if account.warmup_status != "warming" or not account.warmup_started_at:
+        return 0
+    started = account.warmup_started_at
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    return max(0, (datetime.now(timezone.utc) - started).days)
+
+
+def effective_daily_limit(account: EmailAccount) -> int:
+    """The cap to enforce today: during warm-up the volume ramps from
+    WARMUP_START_VOLUME by WARMUP_DAILY_STEP/day up to the account's target
+    daily_limit; otherwise the plain daily_limit."""
+    if account.warmup_status != "warming" or not account.warmup_started_at:
+        return account.daily_limit
+    ramp = WARMUP_START_VOLUME + WARMUP_DAILY_STEP * warmup_day(account)
+    return max(WARMUP_START_VOLUME, min(account.daily_limit, ramp))
 
 
 # Setup score weights (sum = 100)

@@ -20,6 +20,8 @@ def _to_read(acc) -> EmailAccountRead:
     item = EmailAccountRead.model_validate(acc)
     item.tags = svc.tags_list(acc)
     item.has_password = bool(getattr(acc, "smtp_password_enc", ""))
+    item.warmup_day = svc.warmup_day(acc)
+    item.effective_daily_limit = svc.effective_daily_limit(acc)
     return item
 
 

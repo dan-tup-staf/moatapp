@@ -597,9 +597,19 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
         )
 
         # Per-account daily cap — defer to tomorrow when the chosen mailbox has
-        # hit its own limit (protects warm-up / deliverability per mailbox).
-        if send_acc is not None and send_acc.daily_limit > 0:
-            if await _account_sent_today(db, send_acc.email) >= send_acc.daily_limit:
+        # hit its own limit. During warm-up the effective cap ramps up slowly.
+        if send_acc is not None:
+            from app.services.email_accounts import effective_daily_limit
+
+            cap = effective_daily_limit(send_acc)
+            # Ramp complete → graduate the mailbox to "ready".
+            if (
+                send_acc.warmup_status == "warming"
+                and cap >= send_acc.daily_limit
+                and send_acc.daily_limit > 0
+            ):
+                send_acc.warmup_status = "ready"
+            if cap > 0 and await _account_sent_today(db, send_acc.email) >= cap:
                 tomorrow = (
                     datetime.now(timezone.utc) + timedelta(days=1)
                 ).replace(hour=9, minute=0, second=0, microsecond=0)
