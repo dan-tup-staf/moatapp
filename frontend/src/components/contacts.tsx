@@ -4,10 +4,14 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import {
   ArrowRight,
+  Bell,
+  Building2,
   Clock,
   Database,
   FileSpreadsheet,
+  Flame,
   Plus,
+  Search,
   Trash2,
   Upload,
   Users,
@@ -430,11 +434,79 @@ function IntegrationsTab({ onPickCsv }: { onPickCsv: () => void }) {
 
 type SortCompanies = "score" | "leads" | "signals" | "recent";
 
+// ---------- Tiering (Tier 1/2/3 + niekwalifikowane) ----------
+
+type TierKey = "all" | "t1" | "t2" | "t3" | "nq";
+
+function tierOf(score: number): Exclude<TierKey, "all"> {
+  if (score > 100) return "t1";
+  if (score > 20) return "t2";
+  if (score > 0) return "t3";
+  return "nq";
+}
+
+const TIERS: {
+  key: Exclude<TierKey, "all">;
+  label: string;
+  sub: string;
+  ring: string; // avatar / accent bg
+  text: string;
+  soft: string; // badge bg
+  bar: string;
+}[] = [
+  {
+    key: "t1",
+    label: "Tier 1",
+    sub: "Najgorętsze · score > 100",
+    ring: "bg-rose-500",
+    text: "text-rose-600",
+    soft: "bg-rose-50 text-rose-700 border-rose-200",
+    bar: "bg-rose-500",
+  },
+  {
+    key: "t2",
+    label: "Tier 2",
+    sub: "Ciepłe · 21–100",
+    ring: "bg-amber-500",
+    text: "text-amber-600",
+    soft: "bg-amber-50 text-amber-700 border-amber-200",
+    bar: "bg-amber-500",
+  },
+  {
+    key: "t3",
+    label: "Tier 3",
+    sub: "Letnie · 1–20",
+    ring: "bg-sky-500",
+    text: "text-sky-600",
+    soft: "bg-sky-50 text-sky-700 border-sky-200",
+    bar: "bg-sky-500",
+  },
+  {
+    key: "nq",
+    label: "Niekwalifikowane",
+    sub: "Bez sygnału · 0",
+    ring: "bg-gray-400",
+    text: "text-gray-500",
+    soft: "bg-gray-100 text-gray-600 border-gray-200",
+    bar: "bg-gray-300",
+  },
+];
+
+const TIER_META = Object.fromEntries(TIERS.map((t) => [t.key, t]));
+
+function companyInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const ini = parts.map((w) => w[0]).slice(0, 2).join("");
+  return ini.toUpperCase() || "?";
+}
+
 export function CompaniesPanel() {
   const [rows, setRows] = useState<CompanyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState<SortCompanies>("score");
+  const [tier, setTier] = useState<TierKey>("all");
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -448,11 +520,27 @@ export function CompaniesPanel() {
     })();
   }, []);
 
-  const sorted = [...rows].sort((a, b) => {
+  const counts = TIERS.reduce<Record<string, number>>(
+    (acc, t) => {
+      acc[t.key] = rows.filter((r) => tierOf(r.total_score) === t.key).length;
+      return acc;
+    },
+    { all: rows.length },
+  );
+
+  const maxScore = Math.max(100, ...rows.map((r) => r.total_score));
+
+  const filtered = rows.filter((r) => {
+    if (tier !== "all" && tierOf(r.total_score) !== tier) return false;
+    const q = query.trim().toLowerCase();
+    if (q && !r.company.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
     if (sort === "score") return b.total_score - a.total_score;
     if (sort === "leads") return b.leads_count - a.leads_count;
     if (sort === "signals") return b.signals_count - a.signals_count;
-    // recent
     const aT = a.last_message_sent_at
       ? new Date(a.last_message_sent_at).getTime()
       : 0;
@@ -471,88 +559,176 @@ export function CompaniesPanel() {
     );
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-600">
-          {rows.length}{" "}
-          {rows.length === 1 ? "firma" : rows.length < 5 ? "firmy" : "firm"}
-        </p>
-        <FilterGroup
-          label="Sort"
-          value={sort}
-          onChange={(v) => setSort(v as SortCompanies)}
-          options={[
-            { value: "score", label: "Score" },
-            { value: "leads", label: "Liczba osób" },
-            { value: "signals", label: "Sygnały" },
-            { value: "recent", label: "Ostatnia akt." },
-          ]}
-        />
+    <div className="space-y-4">
+      {/* Tier summary cards (clickable filters) */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {TIERS.map((t) => {
+          const active = tier === t.key;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setTier(active ? "all" : t.key)}
+              className={
+                "rounded-xl border bg-white p-4 text-left shadow-sm transition " +
+                (active
+                  ? "border-gray-900 ring-1 ring-gray-900"
+                  : "border-gray-200 hover:border-gray-300")
+              }
+            >
+              <div className="flex items-center gap-2">
+                <span className={`h-2.5 w-2.5 rounded-full ${t.ring}`} />
+                <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  {t.label}
+                </span>
+              </div>
+              <p className={`mt-2 text-3xl font-bold ${t.text}`}>
+                {counts[t.key] ?? 0}
+              </p>
+              <p className="mt-0.5 text-[11px] text-gray-400">{t.sub}</p>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="relative max-w-xs flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Szukaj firmy…"
+            className="w-full rounded-md border border-gray-300 py-2 pl-9 pr-3 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          {tier !== "all" && (
+            <button
+              onClick={() => setTier("all")}
+              className="text-xs text-gray-500 underline hover:text-gray-900"
+            >
+              Wyczyść filtr
+            </button>
+          )}
+          <FilterGroup
+            label="Sort"
+            value={sort}
+            onChange={(v) => setSort(v as SortCompanies)}
+            options={[
+              { value: "score", label: "Score" },
+              { value: "leads", label: "Osoby" },
+              { value: "signals", label: "Sygnały" },
+              { value: "recent", label: "Akt." },
+            ]}
+          />
+        </div>
       </div>
 
       {rows.length === 0 ? (
-        <p className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-500">
-          Brak firm — dodaj leadów z polem „firma" w sekcji Listy, a pojawią
-          się tutaj zagregowane.
+        <div className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center">
+          <Building2 className="mx-auto h-8 w-8 text-gray-300" />
+          <p className="mt-2 text-sm text-gray-500">
+            Brak firm — dodaj leadów z polem „firma" w sekcji Listy, a pojawią
+            się tutaj pogrupowane na tiery.
+          </p>
+        </div>
+      ) : sorted.length === 0 ? (
+        <p className="rounded-xl border border-gray-200 bg-white p-6 text-center text-sm text-gray-500">
+          Brak firm w tym tierze / dla tej frazy.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-2 text-left font-medium text-gray-700">
+                <th className="px-4 py-2.5 text-left font-medium text-gray-600">
                   Firma
                 </th>
-                <th className="px-4 py-2 text-right font-medium text-gray-700">
-                  Osoby
+                <th className="px-4 py-2.5 text-left font-medium text-gray-600">
+                  Tier / Score
                 </th>
-                <th className="px-4 py-2 text-left font-medium text-gray-700">
-                  Status
-                </th>
-                <th className="px-4 py-2 text-right font-medium text-gray-700">
+                <th className="px-4 py-2.5 text-left font-medium text-gray-600">
                   Sygnały
                 </th>
-                <th className="px-4 py-2 text-right font-medium text-gray-700">
-                  Aktywnych
+                <th className="px-4 py-2.5 text-center font-medium text-gray-600">
+                  Osoby
                 </th>
-                <th className="px-4 py-2 text-left font-medium text-gray-700">
+                <th className="px-4 py-2.5 text-left font-medium text-gray-600">
+                  Status
+                </th>
+                <th className="px-4 py-2.5 text-left font-medium text-gray-600">
                   Ostatni mail
-                </th>
-                <th className="px-4 py-2 text-right font-medium text-gray-700">
-                  Score
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
-              {sorted.map((c) => (
-                <tr key={c.company} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 font-medium text-gray-900">
-                    {c.company}
-                  </td>
-                  <td className="px-4 py-2 text-right text-gray-700">
-                    {c.leads_count}
-                  </td>
-                  <td className="px-4 py-2">
-                    <StatusBadge status={c.highest_status} />
-                  </td>
-                  <td className="px-4 py-2 text-right text-gray-700">
-                    {c.signals_count}
-                  </td>
-                  <td className="px-4 py-2 text-right text-gray-700">
-                    {c.active_enrollments}
-                  </td>
-                  <td className="px-4 py-2 text-xs text-gray-600">
-                    {c.last_message_sent_at
-                      ? new Date(c.last_message_sent_at).toLocaleDateString(
-                          "pl-PL",
-                        )
-                      : "—"}
-                  </td>
-                  <td className="px-4 py-2 text-right font-mono font-semibold text-gray-900">
-                    {c.total_score}
-                  </td>
-                </tr>
-              ))}
+            <tbody className="divide-y divide-gray-100">
+              {sorted.map((c) => {
+                const tk = tierOf(c.total_score);
+                const m = TIER_META[tk];
+                const pct = Math.min(
+                  100,
+                  Math.round((c.total_score / maxScore) * 100),
+                );
+                return (
+                  <tr key={c.company} className="hover:bg-gray-50">
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-semibold text-white ${m.ring}`}
+                        >
+                          {companyInitials(c.company)}
+                        </div>
+                        <span className="font-medium text-gray-900">
+                          {c.company}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${m.soft}`}
+                        >
+                          {tk === "t1" && <Flame className="h-3 w-3" />}
+                          {m.label}
+                        </span>
+                        <span className="font-mono text-xs font-semibold text-gray-700">
+                          {c.total_score}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 h-1.5 w-28 overflow-hidden rounded-full bg-gray-100">
+                        <div
+                          className={`h-full rounded-full ${m.bar}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span className="inline-flex items-center gap-1 text-gray-700">
+                        <Bell className="h-3.5 w-3.5 text-gray-400" />
+                        {c.signals_count}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-center text-gray-700">
+                      {c.leads_count}
+                      {c.active_enrollments > 0 && (
+                        <span className="ml-1 text-[11px] text-emerald-600">
+                          ({c.active_enrollments} aktywnych)
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <StatusBadge status={c.highest_status} />
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-gray-600">
+                      {c.last_message_sent_at
+                        ? new Date(c.last_message_sent_at).toLocaleDateString(
+                            "pl-PL",
+                          )
+                        : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -616,110 +792,143 @@ export function PeoplePanel() {
     );
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <input
-          type="search"
-          placeholder="Szukaj: email, imię, firma, stanowisko..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="flex-1 min-w-[240px] rounded-md border border-gray-300 px-3 py-1.5 text-sm"
-        />
-        <FilterGroup
-          label="Sort"
-          value={sort}
-          onChange={(v) => setSort(v as SortPeople)}
-          options={[
-            { value: "score", label: "Score" },
-            { value: "recent", label: "Dodane" },
-            { value: "name", label: "Nazwisko" },
-            { value: "signals", label: "Sygnały" },
-          ]}
-        />
+        <div className="relative max-w-sm flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            type="search"
+            placeholder="Szukaj: email, imię, firma, stanowisko…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-full rounded-md border border-gray-300 py-2 pl-9 pr-3 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <p className="text-xs text-gray-500">
+            {sorted.length} z {rows.length}
+          </p>
+          <FilterGroup
+            label="Sort"
+            value={sort}
+            onChange={(v) => setSort(v as SortPeople)}
+            options={[
+              { value: "score", label: "Score" },
+              { value: "recent", label: "Dodane" },
+              { value: "name", label: "Nazwisko" },
+              { value: "signals", label: "Sygnały" },
+            ]}
+          />
+        </div>
       </div>
-      <p className="text-xs text-gray-500">
-        Pokazuję {sorted.length} z {rows.length}
-      </p>
 
       {sorted.length === 0 ? (
-        <p className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-500">
-          {rows.length === 0
-            ? "Brak osób — dodaj leadów do listy w sekcji Listy."
-            : "Brak wyników dla filtra."}
-        </p>
+        <div className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center">
+          <Users className="mx-auto h-8 w-8 text-gray-300" />
+          <p className="mt-2 text-sm text-gray-500">
+            {rows.length === 0
+              ? "Brak osób — dodaj leadów do listy w sekcji Listy."
+              : "Brak wyników dla filtra."}
+          </p>
+        </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-2 text-left font-medium text-gray-700">
+                <th className="px-4 py-2.5 text-left font-medium text-gray-600">
                   Osoba
                 </th>
-                <th className="px-4 py-2 text-left font-medium text-gray-700">
+                <th className="px-4 py-2.5 text-left font-medium text-gray-600">
                   Firma / stanowisko
                 </th>
-                <th className="px-4 py-2 text-left font-medium text-gray-700">
+                <th className="px-4 py-2.5 text-left font-medium text-gray-600">
+                  Tier / Score
+                </th>
+                <th className="px-4 py-2.5 text-left font-medium text-gray-600">
                   Lista
                 </th>
-                <th className="px-4 py-2 text-left font-medium text-gray-700">
+                <th className="px-4 py-2.5 text-left font-medium text-gray-600">
                   Status
                 </th>
-                <th className="px-4 py-2 text-right font-medium text-gray-700">
+                <th className="px-4 py-2.5 text-center font-medium text-gray-600">
                   Sygnały
-                </th>
-                <th className="px-4 py-2 text-left font-medium text-gray-700">
-                  Ostatni mail
-                </th>
-                <th className="px-4 py-2 text-right font-medium text-gray-700">
-                  Score
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
-              {sorted.map((p) => (
-                <tr key={p.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2">
-                    <div className="text-gray-900">{p.email}</div>
-                    {(p.first_name || p.last_name) && (
-                      <div className="text-xs text-gray-500">
-                        {[p.first_name, p.last_name]
-                          .filter(Boolean)
-                          .join(" ")}
+            <tbody className="divide-y divide-gray-100">
+              {sorted.map((p, i) => {
+                const tk = tierOf(p.score);
+                const m = TIER_META[tk];
+                const name =
+                  [p.first_name, p.last_name].filter(Boolean).join(" ") ||
+                  p.email;
+                const ini =
+                  (
+                    (p.first_name?.[0] ?? "") + (p.last_name?.[0] ?? "")
+                  ).toUpperCase() ||
+                  p.email[0]?.toUpperCase() ||
+                  "?";
+                return (
+                  <tr key={p.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${
+                            AVATARS[i % AVATARS.length]
+                          }`}
+                        >
+                          {ini}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate font-medium text-gray-900">
+                            {name}
+                          </div>
+                          <div className="truncate text-xs text-gray-500">
+                            {p.email}
+                          </div>
+                        </div>
                       </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-2">
-                    <div className="text-gray-900">{p.company ?? "—"}</div>
-                    {p.title && (
-                      <div className="text-xs text-gray-500">{p.title}</div>
-                    )}
-                  </td>
-                  <td className="px-4 py-2 text-gray-700">
-                    <Link
-                      href={`/lists/${p.list_id}`}
-                      className="hover:underline"
-                    >
-                      {p.list_name}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-2">
-                    <StatusBadge status={p.status} />
-                  </td>
-                  <td className="px-4 py-2 text-right text-gray-700">
-                    {p.signals_count}
-                  </td>
-                  <td className="px-4 py-2 text-xs text-gray-600">
-                    {p.last_message_sent_at
-                      ? new Date(p.last_message_sent_at).toLocaleDateString(
-                          "pl-PL",
-                        )
-                      : "—"}
-                  </td>
-                  <td className="px-4 py-2 text-right font-mono font-semibold text-gray-900">
-                    {p.score}
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <div className="text-gray-900">{p.company ?? "—"}</div>
+                      {p.title && (
+                        <div className="text-xs text-gray-500">{p.title}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${m.soft}`}
+                        >
+                          {tk === "t1" && <Flame className="h-3 w-3" />}
+                          {m.label}
+                        </span>
+                        <span className="font-mono text-xs font-semibold text-gray-700">
+                          {p.score}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5 text-gray-700">
+                      <Link
+                        href={`/lists/${p.list_id}`}
+                        className="hover:underline"
+                      >
+                        {p.list_name}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <StatusBadge status={p.status} />
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      <span className="inline-flex items-center gap-1 text-gray-700">
+                        <Bell className="h-3.5 w-3.5 text-gray-400" />
+                        {p.signals_count}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -727,6 +936,15 @@ export function PeoplePanel() {
     </div>
   );
 }
+
+const AVATARS = [
+  "bg-violet-500",
+  "bg-blue-500",
+  "bg-emerald-500",
+  "bg-amber-500",
+  "bg-rose-500",
+  "bg-sky-500",
+];
 
 // ---------- ICP panel ----------
 
