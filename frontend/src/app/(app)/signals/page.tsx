@@ -2,6 +2,20 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import {
+  Banknote,
+  Bell,
+  Briefcase,
+  Building2,
+  Globe,
+  type LucideIcon,
+  MessageCircle,
+  Newspaper,
+  Rss,
+  Search,
+  TrendingUp,
+  Users,
+} from "lucide-react";
 
 import { api, ApiError, SignalSummary, SourceType } from "@/lib/api-client";
 
@@ -14,6 +28,28 @@ const TYPE_LABELS: Record<SourceType, string> = {
   serp: "SERP",
   funding: "Bazy fundingowe",
   company_site: "Strona firmowa",
+};
+
+const TYPE_ICONS: Record<SourceType, LucideIcon> = {
+  rss: Rss,
+  pracuj_pl: Briefcase,
+  linkedin: Users,
+  google_news: Newspaper,
+  x_twitter: MessageCircle,
+  serp: Search,
+  funding: Banknote,
+  company_site: Globe,
+};
+
+const TYPE_ACCENTS: Record<SourceType, string> = {
+  rss: "bg-orange-100 text-orange-700",
+  pracuj_pl: "bg-indigo-100 text-indigo-700",
+  linkedin: "bg-blue-100 text-blue-700",
+  google_news: "bg-rose-100 text-rose-700",
+  x_twitter: "bg-sky-100 text-sky-700",
+  serp: "bg-emerald-100 text-emerald-700",
+  funding: "bg-violet-100 text-violet-700",
+  company_site: "bg-gray-100 text-gray-700",
 };
 
 type StrengthFilter = "all" | "strong" | "medium" | "weak";
@@ -170,16 +206,39 @@ export default function SignalsPage() {
           <p className="mt-1 text-sm text-gray-600">
             {filtered.length}
             {hasActiveFilter && ` z ${summaries.length}`}{" "}
-            {filtered.length === 1 ? "źródło" : "źródeł"} · {totalSignals}{" "}
-            detekcji · {totalCompanies} firm · +{totalImpact} pipeline
+            {filtered.length === 1 ? "aktywne źródło" : "aktywnych źródeł"}{" "}
+            sygnałów zakupowych
           </p>
         </div>
         <button
           onClick={refresh}
-          className="rounded-md border border-gray-300 px-3 py-1 text-sm hover:bg-gray-100"
+          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium hover:bg-gray-100"
         >
           Odśwież
         </button>
+      </div>
+
+      {/* Summary tiles */}
+      <div className="grid grid-cols-3 gap-4">
+        <SummaryTile
+          icon={Bell}
+          accent="bg-amber-100 text-amber-700"
+          value={totalSignals}
+          label="Detekcji"
+        />
+        <SummaryTile
+          icon={Building2}
+          accent="bg-blue-100 text-blue-700"
+          value={totalCompanies}
+          label="Firm z sygnałem"
+        />
+        <SummaryTile
+          icon={TrendingUp}
+          accent="bg-emerald-100 text-emerald-700"
+          value={totalImpact}
+          label="Wpływ na pipeline"
+          prefix="+"
+        />
       </div>
 
       {/* Filters */}
@@ -323,33 +382,42 @@ function FilterGroup<T extends string>({
 function SignalCard({ summary: s }: { summary: SignalSummary }) {
   const strength = computeStrength(s);
   const days = daysSince(s.latest_signal_at);
+  const Icon = TYPE_ICONS[s.source_type] ?? Bell;
 
-  const strengthColor =
+  const strengthBar =
     strength >= 4
-      ? "text-emerald-600"
+      ? "bg-emerald-500"
       : strength >= 2
-        ? "text-yellow-600"
-        : "text-gray-400";
+        ? "bg-amber-500"
+        : "bg-gray-300";
 
   return (
     <Link
       href={`/signals/${s.source_id}`}
-      className="block rounded-lg border border-gray-200 bg-white p-5 transition hover:border-gray-400 hover:shadow-sm"
+      className="block rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:border-gray-400 hover:shadow-md"
     >
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="min-w-0 flex-1 font-semibold text-gray-900">
-          {s.source_name}
-        </h3>
-        <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
-          {TYPE_LABELS[s.source_type] ?? s.source_type}
-        </span>
+      <div className="flex items-start gap-3">
+        <div
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+            TYPE_ACCENTS[s.source_type] ?? "bg-gray-100 text-gray-700"
+          }`}
+        >
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate font-semibold text-gray-900">
+            {s.source_name}
+          </h3>
+          <p className="text-xs text-gray-500">
+            {TYPE_LABELS[s.source_type] ?? s.source_type}
+          </p>
+        </div>
+        {!s.enabled && (
+          <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] text-amber-800">
+            wyłączone
+          </span>
+        )}
       </div>
-
-      {!s.enabled && (
-        <span className="mt-2 inline-block rounded-full bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">
-          wyłączone
-        </span>
-      )}
 
       <div className="mt-4 grid grid-cols-3 gap-2">
         <Stat
@@ -370,21 +438,26 @@ function SignalCard({ summary: s }: { summary: SignalSummary }) {
         />
       </div>
 
-      <div className="mt-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <div className="flex flex-1 items-center gap-2">
           <span className="text-xs font-medium uppercase text-gray-500">
             Siła
           </span>
-          <div className={"text-lg tracking-wide " + strengthColor}>
-            {"●".repeat(strength)}
-            <span className="text-gray-200">
-              {"○".repeat(5 - strength)}
+          <div className="flex flex-1 items-center gap-1.5">
+            <div className="h-1.5 max-w-[120px] flex-1 overflow-hidden rounded-full bg-gray-100">
+              <div
+                className={`h-full rounded-full ${strengthBar}`}
+                style={{ width: `${(strength / 5) * 100}%` }}
+              />
+            </div>
+            <span className="font-mono text-xs font-semibold text-gray-600">
+              {strength}/5
             </span>
           </div>
         </div>
 
         {s.signals_count > 0 && (
-          <p className="text-xs text-gray-500">
+          <p className="shrink-0 text-xs text-gray-500">
             hit rate:{" "}
             {Math.round(
               (s.linked_signals_count / s.signals_count) * 100,
@@ -394,6 +467,35 @@ function SignalCard({ summary: s }: { summary: SignalSummary }) {
         )}
       </div>
     </Link>
+  );
+}
+
+function SummaryTile({
+  icon: Icon,
+  accent,
+  value,
+  label,
+  prefix = "",
+}: {
+  icon: LucideIcon;
+  accent: string;
+  value: number;
+  label: string;
+  prefix?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div
+        className={`flex h-8 w-8 items-center justify-center rounded-lg ${accent}`}
+      >
+        <Icon className="h-4 w-4" />
+      </div>
+      <p className="mt-3 text-2xl font-bold text-gray-900">
+        {prefix}
+        {value}
+      </p>
+      <p className="text-xs text-gray-500">{label}</p>
+    </div>
   );
 }
 

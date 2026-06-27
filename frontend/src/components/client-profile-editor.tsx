@@ -421,6 +421,11 @@ function ListField({
   items: string[];
   onChange: (v: string[]) => void;
 }) {
+  // Keep the raw textarea text in local state so spaces (incl. the trailing
+  // one you just typed) survive — we only split/trim when propagating up, not
+  // on every keystroke (which would strip the space before the next word).
+  const [text, setText] = useState(items.join("\n"));
+
   return (
     <div>
       <div className="mb-1.5 flex items-center gap-1.5">
@@ -433,8 +438,11 @@ function ListField({
         </span>
       </div>
       <textarea
-        value={items.join("\n")}
-        onChange={(e) => onChange(splitLines(e.target.value))}
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          onChange(splitLines(e.target.value));
+        }}
         rows={3}
         placeholder="Każdy punkt w nowej linii…"
         className="block w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
