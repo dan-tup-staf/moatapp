@@ -244,17 +244,31 @@ function AccountRow({
     }
   }
 
+  async function resume() {
+    setBusy(true);
+    try {
+      await api.emailAccounts.update(account.id, { active: true });
+      onChanged();
+    } catch (e) {
+      alert(e instanceof ApiError ? e.detail : "Błąd");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const warm = WARMUP[account.warmup_status];
-  const conn = account.has_password
-    ? account.verified
-      ? { cls: "bg-emerald-50 text-emerald-700", label: "Połączona" }
-      : account.last_error
-        ? { cls: "bg-red-50 text-red-600", label: "Błąd połączenia" }
-        : { cls: "bg-amber-50 text-amber-700", label: "Niezweryfikowana" }
-    : { cls: "bg-gray-100 text-gray-500", label: "Brak hasła" };
+  const conn = !account.active
+    ? { cls: "bg-rose-50 text-rose-700", label: "Wstrzymana (odbicia)" }
+    : account.has_password
+      ? account.verified
+        ? { cls: "bg-emerald-50 text-emerald-700", label: "Połączona" }
+        : account.last_error
+          ? { cls: "bg-red-50 text-red-600", label: "Błąd połączenia" }
+          : { cls: "bg-amber-50 text-amber-700", label: "Niezweryfikowana" }
+      : { cls: "bg-gray-100 text-gray-500", label: "Brak hasła" };
 
   return (
-    <tr className="hover:bg-gray-50/60">
+    <tr className={account.active ? "hover:bg-gray-50/60" : "bg-rose-50/30"}>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
           <span className="font-medium text-gray-900">{account.email}</span>
@@ -264,6 +278,15 @@ function AccountRow({
           >
             {conn.label}
           </span>
+          {!account.active && (
+            <button
+              onClick={resume}
+              disabled={busy}
+              className="rounded-md border border-gray-300 px-2 py-0.5 text-[10px] font-medium hover:bg-gray-100 disabled:opacity-50"
+            >
+              Wznów
+            </button>
+          )}
         </div>
         <div className="text-xs text-gray-500">
           {account.from_name || "— brak nazwy nadawcy —"}
