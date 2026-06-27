@@ -17,7 +17,7 @@ B2B SaaS do outreachu opartego o sygnały zakupowe (intent data). Stack:
 - Render: **`moation-api`** (backend) i **`moation-web`** (frontend). Deploy
   `moation-api` odpala `alembic upgrade head` (migracje w `backend/alembic/versions/`).
 - Po zmianach user robi „Deploy latest commit" (lub ma Auto-Deploy: Yes).
-- Migracje są addytywne (0008–0016). Najnowsza migracja: `0016`.
+- Migracje są addytywne (0008–0017). Najnowsza migracja: `0017`.
 
 ## Konta / dostęp
 - Login do appki: `daniel.tupczynski@staffly.pl`, hasło ustawione na `Moation2026!`
@@ -99,7 +99,14 @@ screenów** (karty, kolory, ikony lucide, ładne stany). Uwaga: ikony brandowe
    TODO (persist jest, działanie później): stop_on_reply (po IMAP reply tracking),
    track_clicks (po przepisywaniu linków), same_thread (nagłówki References),
    sending_priority (kolejność w workerze), ESP Matching, Email Verification.
-6. **Subsequence** (rozgałęzienia warunkowe), **Sequence Score** realny scoring.
+6. ✅ **Sequence Score realny — ZROBIONE.** `compute_sequence_score` (9
+   czynników) + `GET /campaigns/{id}/score`; klikalny badge → panel z rozbiciem.
+   ✅ **Subsequence — ZROBIONE (definicje + UI 1:1).** Zakładka „Subsequence"
+   (`frontend/src/components/subsequence.tsx`): reguły „po kroku N, jeśli
+   [otworzył/kliknął/odpowiedział/neg.] → [stop/ustaw outcome/dodaj tag]". Model
+   `SequenceBranch` (migr. `0017`), CRUD `/campaigns/{id}/branches`. TODO:
+   wykonywanie reguł w workerze (dziś wysyłka liniowa) — wymaga rozszerzenia
+   `email_sender._process_one` o ewaluację warunków po wysyłce kroku.
 7. **Reply tracking (IMAP)** → stop-on-reply + kolumna Replied. **Click tracking.**
 8. ⏳ **Listy — CZĘŚCIOWO.** `/lists` przebudowane na siatkę kart + modal
    „Dodaj prospektów" z zakładkami **Import CSV** (realnie: tworzy listę i

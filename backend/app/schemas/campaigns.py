@@ -329,6 +329,50 @@ class ProspectFunnel(BaseModel):
     out_of_office: int = 0
 
 
+class BranchCondition(str, Enum):
+    OPENED = "opened"
+    NOT_OPENED = "not_opened"
+    CLICKED = "clicked"
+    NOT_CLICKED = "not_clicked"
+    REPLIED = "replied"
+    NOT_REPLIED = "not_replied"
+
+
+class BranchAction(str, Enum):
+    STOP = "stop"
+    MARK_OUTCOME = "mark_outcome"
+    ADD_TAG = "add_tag"
+
+
+class BranchCreate(BaseModel):
+    after_step_order: int = Field(ge=0)
+    condition: BranchCondition
+    action: BranchAction
+    outcome: EnrollmentOutcome | None = None
+    tag: str | None = Field(default=None, max_length=64)
+
+
+class BranchUpdate(BaseModel):
+    after_step_order: int | None = Field(default=None, ge=0)
+    condition: BranchCondition | None = None
+    action: BranchAction | None = None
+    outcome: EnrollmentOutcome | None = None
+    tag: str | None = Field(default=None, max_length=64)
+
+
+class BranchRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    campaign_id: int
+    after_step_order: int
+    condition: BranchCondition
+    action: BranchAction
+    outcome: EnrollmentOutcome | None
+    tag: str | None
+    created_at: datetime
+
+
 class ScoreFactor(BaseModel):
     key: str
     label: str

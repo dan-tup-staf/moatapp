@@ -5,6 +5,7 @@ from app.models.icp_profile import IcpProfile
 from app.models.lead import Lead
 from app.models.lead_list import LeadList
 from app.models.message import Message
+from app.models.sequence_branch import SequenceBranch
 from app.models.sequence_step import SequenceStep
 from app.models.signal import Signal
 from app.models.signal_source import SignalSource
@@ -19,6 +20,7 @@ __all__ = [
     "CampaignEnrollment",
     "EmailAccount",
     "Message",
+    "SequenceBranch",
     "SignalSource",
     "Signal",
     "IcpProfile",

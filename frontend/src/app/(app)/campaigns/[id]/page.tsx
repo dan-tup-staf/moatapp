@@ -6,6 +6,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
+  GitBranch,
   ListOrdered,
   Pause,
   Play,
@@ -38,6 +39,7 @@ import {
 } from "@/lib/api-client";
 import { StepsTab } from "@/components/sequence-steps";
 import { ProspectsTab } from "@/components/prospects";
+import { SubsequenceTab } from "@/components/subsequence";
 
 const CHANNEL_LABELS: Record<StepChannel, string> = {
   email: "Email",
@@ -96,7 +98,7 @@ const STATUS_LABELS: Record<CampaignStatus, string> = {
   archived: "Archiwum",
 };
 
-type TabKey = "kroki" | "odbiorcy" | "ustawienia";
+type TabKey = "kroki" | "odbiorcy" | "subsequence" | "ustawienia";
 
 function SeqScoreBadge({ score }: { score: number }) {
   const color =
@@ -210,6 +212,7 @@ function SeqTabs({
   const items: { key: TabKey; label: string; icon: typeof ListOrdered }[] = [
     { key: "kroki", label: "Kroki", icon: ListOrdered },
     { key: "odbiorcy", label: "Odbiorcy", icon: Users2 },
+    { key: "subsequence", label: "Subsequence", icon: GitBranch },
     { key: "ustawienia", label: "Ustawienia", icon: Settings2 },
   ];
   return (
@@ -499,6 +502,11 @@ export default function CampaignDetailPage() {
           statsByStepId={statsByStepId}
           refresh={refresh}
         />
+      )}
+
+      {/* TAB: Subsequence */}
+      {tab === "subsequence" && (
+        <SubsequenceTab campaignId={campaignId} steps={steps} />
       )}
 
       {/* TAB: Odbiorcy */}

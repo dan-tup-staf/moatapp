@@ -369,6 +369,37 @@ export type ProspectFunnel = {
   out_of_office: number;
 };
 
+export type BranchCondition =
+  | "opened"
+  | "not_opened"
+  | "clicked"
+  | "not_clicked"
+  | "replied"
+  | "not_replied";
+
+export type BranchAction = "stop" | "mark_outcome" | "add_tag";
+
+export type SequenceBranch = {
+  id: number;
+  campaign_id: number;
+  after_step_order: number;
+  condition: BranchCondition;
+  action: BranchAction;
+  outcome: EnrollmentOutcome | null;
+  tag: string | null;
+  created_at: string;
+};
+
+export type BranchCreate = {
+  after_step_order: number;
+  condition: BranchCondition;
+  action: BranchAction;
+  outcome?: EnrollmentOutcome | null;
+  tag?: string | null;
+};
+
+export type BranchUpdate = Partial<BranchCreate>;
+
 export type ScoreFactor = {
   key: string;
   label: string;
@@ -955,6 +986,24 @@ export const api = {
 
     score: (campaignId: number) =>
       authed<SequenceScore>(`/campaigns/${campaignId}/score`),
+
+    // Subsequence (conditional branches)
+    listBranches: (campaignId: number) =>
+      authed<SequenceBranch[]>(`/campaigns/${campaignId}/branches`),
+    createBranch: (campaignId: number, data: BranchCreate) =>
+      authed<SequenceBranch>(`/campaigns/${campaignId}/branches`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    updateBranch: (campaignId: number, branchId: number, data: BranchUpdate) =>
+      authed<SequenceBranch>(
+        `/campaigns/${campaignId}/branches/${branchId}`,
+        { method: "PATCH", body: JSON.stringify(data) },
+      ),
+    deleteBranch: (campaignId: number, branchId: number) =>
+      authed<void>(`/campaigns/${campaignId}/branches/${branchId}`, {
+        method: "DELETE",
+      }),
 
     audiencePreview: (campaignId: number, criteria: AudienceCriteria) =>
       authed<AudiencePreview>(`/campaigns/${campaignId}/audience/preview`, {

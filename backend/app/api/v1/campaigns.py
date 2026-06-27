@@ -17,6 +17,9 @@ from app.schemas.campaigns import (
     CampaignRead,
     CampaignStats,
     CampaignUpdate,
+    BranchCreate,
+    BranchRead,
+    BranchUpdate,
     BulkResult,
     EnrollFromList,
     EnrollmentBulkRequest,
@@ -477,6 +480,66 @@ async def get_stats(
     await _ensure_owned_campaign(db, current, campaign_id)
     data = await svc.get_campaign_stats(db, campaign_id)
     return CampaignStats(**data)
+
+
+@router.get("/{campaign_id}/branches", response_model=list[BranchRead])
+async def list_branches(
+    campaign_id: int,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[BranchRead]:
+    await _ensure_owned_campaign(db, current, campaign_id)
+    rows = await svc.list_branches(db, campaign_id)
+    return [BranchRead.model_validate(b) for b in rows]
+
+
+@router.post(
+    "/{campaign_id}/branches",
+    response_model=BranchRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_branch(
+    campaign_id: int,
+    payload: BranchCreate,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BranchRead:
+    await _ensure_owned_campaign(db, current, campaign_id)
+    branch = await svc.create_branch(db, campaign_id, payload)
+    return BranchRead.model_validate(branch)
+
+
+@router.patch("/{campaign_id}/branches/{branch_id}", response_model=BranchRead)
+async def update_branch(
+    campaign_id: int,
+    branch_id: int,
+    payload: BranchUpdate,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> BranchRead:
+    await _ensure_owned_campaign(db, current, campaign_id)
+    branch = await svc.get_branch(db, campaign_id, branch_id)
+    if branch is None:
+        raise HTTPException(status_code=404, detail="Branch not found")
+    branch = await svc.update_branch(db, branch, payload)
+    return BranchRead.model_validate(branch)
+
+
+@router.delete(
+    "/{campaign_id}/branches/{branch_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_branch(
+    campaign_id: int,
+    branch_id: int,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await _ensure_owned_campaign(db, current, campaign_id)
+    branch = await svc.get_branch(db, campaign_id, branch_id)
+    if branch is None:
+        raise HTTPException(status_code=404, detail="Branch not found")
+    await svc.delete_branch(db, branch)
 
 
 @router.get("/{campaign_id}/score", response_model=SequenceScore)

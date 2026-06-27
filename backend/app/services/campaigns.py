@@ -12,9 +12,12 @@ from app.models.campaign_enrollment import CampaignEnrollment
 from app.models.lead import Lead
 from app.models.lead_list import LeadList
 from app.models.message import Message
+from app.models.sequence_branch import SequenceBranch
 from app.models.sequence_step import SequenceStep
 from app.models.sequence_step_variant import StepVariant
 from app.schemas.campaigns import (
+    BranchCreate,
+    BranchUpdate,
     BulkAction,
     CampaignCreate,
     CampaignUpdate,
@@ -777,6 +780,70 @@ async def delete_enrollment(
     db: AsyncSession, enrollment: CampaignEnrollment
 ) -> None:
     await db.delete(enrollment)
+    await db.commit()
+
+
+# ---------- Subsequence (conditional branches) ----------
+
+
+async def list_branches(
+    db: AsyncSession, campaign_id: int
+) -> list[SequenceBranch]:
+    res = await db.execute(
+        select(SequenceBranch)
+        .where(SequenceBranch.campaign_id == campaign_id)
+        .order_by(
+            SequenceBranch.after_step_order.asc(), SequenceBranch.id.asc()
+        )
+    )
+    return list(res.scalars().all())
+
+
+async def create_branch(
+    db: AsyncSession, campaign_id: int, payload: BranchCreate
+) -> SequenceBranch:
+    obj = SequenceBranch(
+        campaign_id=campaign_id,
+        after_step_order=payload.after_step_order,
+        condition=payload.condition.value,
+        action=payload.action.value,
+        outcome=payload.outcome.value if payload.outcome else None,
+        tag=payload.tag,
+    )
+    db.add(obj)
+    await db.commit()
+    await db.refresh(obj)
+    return obj
+
+
+async def get_branch(
+    db: AsyncSession, campaign_id: int, branch_id: int
+) -> SequenceBranch | None:
+    res = await db.execute(
+        select(SequenceBranch).where(
+            SequenceBranch.id == branch_id,
+            SequenceBranch.campaign_id == campaign_id,
+        )
+    )
+    return res.scalar_one_or_none()
+
+
+async def update_branch(
+    db: AsyncSession, branch: SequenceBranch, payload: BranchUpdate
+) -> SequenceBranch:
+    data = payload.model_dump(exclude_unset=True)
+    for k in ("condition", "action", "outcome"):
+        if k in data and hasattr(data[k], "value"):
+            data[k] = data[k].value
+    for k, v in data.items():
+        setattr(branch, k, v)
+    await db.commit()
+    await db.refresh(branch)
+    return branch
+
+
+async def delete_branch(db: AsyncSession, branch: SequenceBranch) -> None:
+    await db.delete(branch)
     await db.commit()
 
 
