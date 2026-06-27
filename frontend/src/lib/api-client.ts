@@ -58,6 +58,53 @@ export type DomainHealth = {
   healthy: boolean;
 };
 
+export type WarmupStatus = "off" | "warming" | "ready" | "paused";
+
+export type EmailAccount = {
+  id: number;
+  email: string;
+  from_name: string | null;
+  provider: string;
+  smtp_host: string | null;
+  smtp_port: number | null;
+  smtp_username: string | null;
+  daily_limit: number;
+  tags: string[];
+  warmup_status: WarmupStatus;
+  active: boolean;
+  created_at: string;
+};
+
+export type EmailAccountCreate = {
+  email: string;
+  from_name?: string | null;
+  provider?: string;
+  smtp_host?: string | null;
+  smtp_port?: number | null;
+  smtp_username?: string | null;
+  daily_limit?: number;
+  tags?: string[];
+};
+
+export type EmailAccountUpdate = {
+  from_name?: string | null;
+  provider?: string;
+  smtp_host?: string | null;
+  smtp_port?: number | null;
+  smtp_username?: string | null;
+  daily_limit?: number;
+  tags?: string[];
+  warmup_status?: WarmupStatus;
+  active?: boolean;
+};
+
+export type EmailAccountSetup = {
+  domain: string;
+  score: number;
+  max_score: number;
+  checks: Record<string, DomainCheck>;
+};
+
 export type LeadList = {
   id: number;
   name: string;
@@ -687,6 +734,25 @@ export const api = {
       authed<DomainHealth>(
         `/domains/check?domain=${encodeURIComponent(domain)}`,
       ),
+  },
+
+  // Email accounts (sending mailboxes / Deliverability)
+  emailAccounts: {
+    list: () => authed<EmailAccount[]>("/email-accounts"),
+    create: (data: EmailAccountCreate) =>
+      authed<EmailAccount>("/email-accounts", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    update: (id: number, data: EmailAccountUpdate) =>
+      authed<EmailAccount>(`/email-accounts/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    delete: (id: number) =>
+      authed<void>(`/email-accounts/${id}`, { method: "DELETE" }),
+    setup: (id: number) =>
+      authed<EmailAccountSetup>(`/email-accounts/${id}/setup`),
   },
 
   // Campaign groups (umbrella "Kampanie" over sequences)

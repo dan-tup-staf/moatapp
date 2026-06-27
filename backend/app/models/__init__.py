@@ -1,5 +1,6 @@
 from app.models.campaign import Campaign
 from app.models.campaign_enrollment import CampaignEnrollment
+from app.models.email_account import EmailAccount
 from app.models.icp_profile import IcpProfile
 from app.models.lead import Lead
 from app.models.lead_list import LeadList
@@ -16,6 +17,7 @@ __all__ = [
     "Campaign",
     "SequenceStep",
     "CampaignEnrollment",
+    "EmailAccount",
     "Message",
     "SignalSource",
     "Signal",

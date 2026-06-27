@@ -17,7 +17,7 @@ B2B SaaS do outreachu opartego o sygnały zakupowe (intent data). Stack:
 - Render: **`moation-api`** (backend) i **`moation-web`** (frontend). Deploy
   `moation-api` odpala `alembic upgrade head` (migracje w `backend/alembic/versions/`).
 - Po zmianach user robi „Deploy latest commit" (lub ma Auto-Deploy: Yes).
-- Migracje są addytywne (0008–0015). Najnowsza migracja: `0015`.
+- Migracje są addytywne (0008–0016). Najnowsza migracja: `0016`.
 
 ## Konta / dostęp
 - Login do appki: `daniel.tupczynski@staffly.pl`, hasło ustawione na `Moation2026!`
@@ -79,8 +79,14 @@ screenów** (karty, kolory, ikony lucide, ładne stany). Uwaga: ikony brandowe
    wzbogacony (sent/opened/clicked/last_activity_at), `PATCH .../enrollments/{id}`,
    `POST .../enrollments/bulk`, `CampaignStats.funnel` (ProspectFunnel).
    TODO dalej: weryfikacja maila (ikona), reply tracking realny (IMAP).
-2. **Email Accounts / Dostarczalność 1:1:** tabela skrzynek (Setup Score, Inbox
-   Score, Warm-up Status, Deliverability %, SPF/DKIM/DMARC/PTR), rotacja nadawców.
+2. ✅ **Email Accounts / Dostarczalność 1:1 — ZROBIONE.** `/deliverability`:
+   tabela skrzynek (Nadawca, **Setup Score** ring 0-100, badge'e DNS SPF/DKIM/
+   DMARC/MX, **Warm-up Status** klikalny pill, edytowalny dzienny limit, tagi,
+   usuń) + formularz „Dodaj skrzynkę" + karta globalnego transportu SMTP. Backend:
+   model `EmailAccount` (migracja `0016`), CRUD `/email-accounts`, endpoint
+   `/email-accounts/{id}/setup` (Setup Score = DoH SPF/DKIM/DMARC/MX + SMTP host
+   + from_name). TODO dalej: rotacja nadawców (account_id na Message), realny
+   warmup (Mailreach/Instantly), Deliverability % per skrzynka (bounce/spam).
 3. **Domeny:** dopieszczenie wizualne (score ring, kolory).
 4. **Konto:** Użytkownicy+role (model org/zespół), Płatności (Stripe, plany, limity).
 5. ✅ **Settings sekwencji 1:1 — ZROBIONE (sekcje Saleshandy).** `SettingsPanel`
