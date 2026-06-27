@@ -32,6 +32,10 @@ class Message(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="sent")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # RFC 5322 Message-ID stamped on the outgoing email — used to thread
+    # follow-ups (In-Reply-To / References) when same_thread is on.
+    message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     sent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

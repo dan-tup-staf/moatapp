@@ -14,6 +14,7 @@ import logging
 import re
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
+from email.utils import make_msgid
 
 import aiosmtplib
 from sqlalchemy import func, select
@@ -364,6 +365,9 @@ async def _send_via_smtp(
     bcc: str | None = None,
     unsub_url: str | None = None,
     creds: "SmtpCreds | None" = None,
+    message_id: str | None = None,
+    in_reply_to: str | None = None,
+    references: str | None = None,
 ) -> None:
     # A connected EmailAccount (creds) wins over the env-configured mailbox.
     # Many providers reject a From that doesn't match the logged-in account, so
@@ -395,6 +399,13 @@ async def _send_via_smtp(
     if cc_list:
         msg["Cc"] = ", ".join(cc_list)
     msg["Subject"] = subject
+    if message_id:
+        msg["Message-ID"] = message_id
+    # Thread follow-ups into the original conversation.
+    if in_reply_to:
+        msg["In-Reply-To"] = in_reply_to
+    if references:
+        msg["References"] = references
     # Unsubscribe header (improves deliverability). Prefer a real signed URL
     # with RFC 8058 one-click POST; fall back to mailto when no public base.
     if unsub_url:
@@ -617,13 +628,42 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
                 await db.commit()
                 return None
 
+        # Threading: keep follow-ups in the original conversation when enabled.
+        out_message_id = make_msgid(
+            domain=(send_from.split("@")[-1] if "@" in send_from else None)
+        )
+        send_subject = subject
+        in_reply_to = None
+        references = None
+        if campaign.same_thread and enr.current_step > 0:
+            prev = (
+                await db.execute(
+                    select(Message)
+                    .where(
+                        Message.enrollment_id == enr.id,
+                        Message.status == "sent",
+                        Message.message_id.isnot(None),
+                    )
+                    .order_by(Message.id.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if prev is not None and prev.message_id:
+                in_reply_to = prev.message_id
+                references = prev.message_id
+                base = (prev.subject or subject).strip()
+                send_subject = (
+                    base if base.lower().startswith("re:") else f"Re: {base}"
+                )
+
         msg = Message(
             enrollment_id=enr.id,
             step_id=step.id,
-            subject=subject,
+            subject=send_subject,
             body=body,
             to_email=lead.email,
             from_email=send_from,
+            message_id=out_message_id,
             status="sent",
         )
         db.add(msg)
@@ -648,13 +688,16 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
                 to_email=lead.email,
                 from_email=send_from,
                 from_name=send_from_name,
-                subject=subject,
+                subject=send_subject,
                 body=body,
                 html=html,
                 cc=campaign.cc,
                 bcc=campaign.bcc,
                 unsub_url=unsub_url,
                 creds=creds,
+                message_id=out_message_id,
+                in_reply_to=in_reply_to,
+                references=references,
             )
             msg.sent_at = datetime.now(timezone.utc)
             msg.status = "sent"

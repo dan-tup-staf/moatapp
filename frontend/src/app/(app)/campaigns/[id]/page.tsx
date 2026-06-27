@@ -1123,7 +1123,7 @@ function SettingsPanel({
             checked={sameThread}
             onChange={setSameThread}
             title="Wysyłaj w tym samym wątku"
-            desc="Kolejne kroki dosyłane jako odpowiedź w wątku pierwszego maila. (nagłówki References — wkrótce)"
+            desc="Kolejne kroki dosyłane jako „Re:” z nagłówkami In-Reply-To/References — wątek u odbiorcy zostaje jeden."
           />
         </div>
       </SettingsSection>
