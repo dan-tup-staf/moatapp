@@ -74,6 +74,12 @@ class Campaign(Base):
     # Constant Cc/Bcc (comma-separated) applied to every email in the sequence.
     cc: Mapped[str | None] = mapped_column(String(512), nullable=True)
     bcc: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Mailbox rotation: comma-separated EmailAccount ids to spread sends across.
+    # Empty = single mailbox (from_email). Assigned per-prospect for thread
+    # consistency.
+    sender_account_ids: Mapped[str] = mapped_column(
+        String(255), nullable=False, server_default=""
+    )
     # prioritise_followups | prioritise_new | balanced | aggressive
     sending_priority: Mapped[str] = mapped_column(
         String(32), nullable=False, server_default="balanced"

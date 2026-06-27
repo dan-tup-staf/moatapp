@@ -44,6 +44,17 @@ from app.services.email_sender import _send_via_smtp, process_due_enrollments
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
 
+def _parse_ids(raw: str | None) -> list[int]:
+    if not raw:
+        return []
+    out: list[int] = []
+    for tok in raw.split(","):
+        tok = tok.strip()
+        if tok.isdigit():
+            out.append(int(tok))
+    return out
+
+
 def _to_campaign_read(c, steps_count: int, enrollments_count: int) -> CampaignRead:
     return CampaignRead(
         id=c.id,
@@ -59,6 +70,7 @@ def _to_campaign_read(c, steps_count: int, enrollments_count: int) -> CampaignRe
         include_unsubscribe=c.include_unsubscribe,
         unsubscribe_text=c.unsubscribe_text,
         track_opens=c.track_opens,
+        sender_account_ids=_parse_ids(getattr(c, "sender_account_ids", "")),
         created_at=c.created_at,
         updated_at=c.updated_at,
         steps_count=steps_count,

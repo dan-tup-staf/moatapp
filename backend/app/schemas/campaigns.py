@@ -115,6 +115,7 @@ class CampaignUpdate(BaseModel):
     bcc: str | None = None
     sending_priority: str | None = Field(default=None, max_length=32)
     deal_value: int | None = Field(default=None, ge=0)
+    sender_account_ids: list[int] | None = None
 
 
 class CampaignRead(BaseModel):
@@ -141,6 +142,7 @@ class CampaignRead(BaseModel):
     bcc: str | None = None
     sending_priority: str = "balanced"
     deal_value: int | None = None
+    sender_account_ids: list[int] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
     steps_count: int = 0

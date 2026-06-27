@@ -706,6 +706,9 @@ function SettingsPanel({
   const [fromEmail, setFromEmail] = useState(campaign.from_email);
   const [fromName, setFromName] = useState(campaign.from_name ?? "");
   const [accounts, setAccounts] = useState<EmailAccount[]>([]);
+  const [senderIds, setSenderIds] = useState<number[]>(
+    campaign.sender_account_ids ?? [],
+  );
 
   useEffect(() => {
     api.emailAccounts
@@ -713,6 +716,12 @@ function SettingsPanel({
       .then((a) => setAccounts(a.filter((x) => x.active)))
       .catch(() => setAccounts([]));
   }, []);
+
+  function toggleSender(id: number) {
+    setSenderIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
   const [status, setStatus] = useState<CampaignStatus>(campaign.status);
   const [scheduledLocal, setScheduledLocal] = useState(
     isoToLocalInput(campaign.scheduled_at),
@@ -782,6 +791,7 @@ function SettingsPanel({
         sending_priority: priority,
         deal_value: dealValue.trim() === "" ? null : Number(dealValue),
         group_id: groupId === "" ? null : Number(groupId),
+        sender_account_ids: senderIds,
       });
       await onSaved();
       onClose();
@@ -861,7 +871,7 @@ function SettingsPanel({
       {/* Konto wysyłkowe */}
       <SettingsSection
         title="Konto wysyłkowe"
-        desc="Adres, z którego wychodzą maile tej sekwencji. Rotacja wielu skrzynek — wkrótce."
+        desc="Adres, z którego wychodzą maile tej sekwencji. Włącz rotację, aby rozłożyć wysyłkę na kilka skrzynek (lepsza dostarczalność)."
       >
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>
@@ -918,6 +928,45 @@ function SettingsPanel({
             />
           </div>
         </div>
+
+        {accounts.length > 1 && (
+          <div className="mt-4 rounded-lg border border-gray-200 p-3">
+            <p className="text-xs font-medium uppercase text-gray-500">
+              Rotacja skrzynek (opcjonalnie)
+            </p>
+            <p className="mt-0.5 text-xs text-gray-500">
+              Zaznacz ≥2 skrzynki, aby rozłożyć wysyłkę. Każdy prospekt dostaje
+              przypisaną jedną skrzynkę na całą sekwencję (spójność wątku). Puste
+              = wysyłka tylko z „Skrzynki wysyłkowej" powyżej.
+            </p>
+            <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              {accounts.map((a) => (
+                <label
+                  key={a.id}
+                  className="flex cursor-pointer items-center gap-2 rounded-md border border-gray-200 px-2.5 py-1.5 text-sm hover:bg-gray-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={senderIds.includes(a.id)}
+                    onChange={() => toggleSender(a.id)}
+                    className="h-4 w-4"
+                  />
+                  <span className="truncate text-gray-800">{a.email}</span>
+                  {a.verified && (
+                    <span className="ml-auto text-[10px] text-emerald-600">
+                      ✓
+                    </span>
+                  )}
+                </label>
+              ))}
+            </div>
+            {senderIds.length === 1 && (
+              <p className="mt-1.5 text-[11px] text-amber-700">
+                Zaznacz min. 2 skrzynki, by rotacja miała sens.
+              </p>
+            )}
+          </div>
+        )}
       </SettingsSection>
 
       {/* Harmonogram wysyłki */}

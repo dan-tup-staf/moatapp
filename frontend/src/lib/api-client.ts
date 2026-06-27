@@ -240,6 +240,7 @@ export type Campaign = {
   bcc: string | null;
   sending_priority: string;
   deal_value: number | null;
+  sender_account_ids: number[];
   created_at: string;
   updated_at: string;
   steps_count: number;
@@ -271,6 +272,7 @@ export type CampaignUpdate = Partial<CampaignCreate> & {
   bcc?: string | null;
   sending_priority?: string;
   deal_value?: number | null;
+  sender_account_ids?: number[];
 };
 
 export type StepChannel =

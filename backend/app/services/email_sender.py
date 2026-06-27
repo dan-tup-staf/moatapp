@@ -154,22 +154,11 @@ class SmtpCreds:
         self.from_name = from_name
 
 
-async def _resolve_creds(db: AsyncSession, user_id: int, from_email: str):
-    """Find an active connected EmailAccount matching the campaign's from_email
-    and turn it into SmtpCreds. Returns None when there's no usable account, so
-    the caller falls back to the env-configured mailbox."""
-    from app.models.email_account import EmailAccount
+def _creds_from_account(acc):
+    """Build SmtpCreds from an EmailAccount, or None when it lacks a usable
+    SMTP host/password."""
     from app.services.crypto import decrypt
 
-    acc = (
-        await db.execute(
-            select(EmailAccount).where(
-                EmailAccount.user_id == user_id,
-                func.lower(EmailAccount.email) == (from_email or "").lower(),
-                EmailAccount.active.is_(True),
-            )
-        )
-    ).scalar_one_or_none()
     if acc is None or not acc.smtp_host or not acc.smtp_password_enc:
         return None
     password = decrypt(acc.smtp_password_enc)
@@ -184,6 +173,55 @@ async def _resolve_creds(db: AsyncSession, user_id: int, from_email: str):
         from_email=acc.email,
         from_name=acc.from_name,
     )
+
+
+async def _resolve_creds(db: AsyncSession, user_id: int, from_email: str):
+    """SmtpCreds for the active connected mailbox matching `from_email`, or
+    None (caller falls back to env)."""
+    from app.models.email_account import EmailAccount
+
+    acc = (
+        await db.execute(
+            select(EmailAccount).where(
+                EmailAccount.user_id == user_id,
+                func.lower(EmailAccount.email) == (from_email or "").lower(),
+                EmailAccount.active.is_(True),
+            )
+        )
+    ).scalar_one_or_none()
+    return _creds_from_account(acc)
+
+
+async def _resolve_sender(db, campaign, enr):
+    """Decide which mailbox sends this prospect's message. When the campaign has
+    rotation configured, pick one of its accounts deterministically by
+    enrollment id (so a prospect keeps the SAME mailbox across all steps —
+    important for thread/deliverability consistency). Returns
+    (creds_or_None, from_email, from_name)."""
+    from app.models.email_account import EmailAccount
+
+    ids = [
+        int(x)
+        for x in (campaign.sender_account_ids or "").split(",")
+        if x.strip().isdigit()
+    ]
+    if ids:
+        rows = (
+            await db.execute(
+                select(EmailAccount).where(
+                    EmailAccount.id.in_(ids),
+                    EmailAccount.user_id == campaign.user_id,
+                    EmailAccount.active.is_(True),
+                )
+            )
+        ).scalars().all()
+        by_id = {a.id: a for a in rows}
+        ordered = [by_id[i] for i in ids if i in by_id]
+        if ordered:
+            acc = ordered[enr.id % len(ordered)]
+            return _creds_from_account(acc), acc.email, acc.from_name
+    creds = await _resolve_creds(db, campaign.user_id, campaign.from_email)
+    return creds, campaign.from_email, campaign.from_name
 
 
 def _split_addrs(raw: str | None) -> list[str]:
@@ -515,13 +553,18 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
             if parts:
                 body = f"{body}\n\n---\n" + "\n".join(parts)
 
+        # Pick the sending mailbox (supports rotation across mailboxes).
+        creds, send_from, send_from_name = await _resolve_sender(
+            db, campaign, enr
+        )
+
         msg = Message(
             enrollment_id=enr.id,
             step_id=step.id,
             subject=subject,
             body=body,
             to_email=lead.email,
-            from_email=campaign.from_email,
+            from_email=send_from,
             status="sent",
         )
         db.add(msg)
@@ -541,12 +584,11 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
                 pixel_url=pixel,
             )
 
-        creds = await _resolve_creds(db, campaign.user_id, campaign.from_email)
         try:
             await _send_via_smtp(
                 to_email=lead.email,
-                from_email=campaign.from_email,
-                from_name=campaign.from_name,
+                from_email=send_from,
+                from_name=send_from_name,
                 subject=subject,
                 body=body,
                 html=html,

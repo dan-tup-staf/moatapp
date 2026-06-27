@@ -318,6 +318,10 @@ async def update_campaign(
     data = payload.model_dump(exclude_unset=True)
     if "status" in data and hasattr(data["status"], "value"):
         data["status"] = data["status"].value
+    # Mailbox rotation is stored as a comma-separated id list.
+    if "sender_account_ids" in data:
+        ids = data.pop("sender_account_ids") or []
+        campaign.sender_account_ids = ",".join(str(int(i)) for i in ids)
     for k, v in data.items():
         setattr(campaign, k, v)
     await db.commit()
