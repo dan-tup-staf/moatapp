@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from app.config import settings
 from app.services.email_sender import process_due_enrollments
+from app.services.imap_reader import poll_all_replies
 from app.services.signals import run_all_enabled_sources
 
 router = APIRouter(tags=["ops"])
@@ -11,6 +12,7 @@ router = APIRouter(tags=["ops"])
 async def tick(
     secret: str = Query(...),
     signals: bool = Query(False),
+    replies: bool = Query(True),
 ) -> dict:
     """Drive the scheduler externally (e.g. a free cron service) so sends fire
     even while the in-process loop is asleep on free hosting. Guarded by
@@ -24,4 +26,11 @@ async def tick(
     new_signals = None
     if signals:
         new_signals = await run_all_enabled_sources()
-    return {"processed": processed, "new_signals": new_signals}
+    replied = None
+    if replies:
+        replied = await poll_all_replies()
+    return {
+        "processed": processed,
+        "new_signals": new_signals,
+        "replied": replied,
+    }

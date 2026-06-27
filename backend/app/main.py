@@ -17,10 +17,13 @@ async def _scheduler_loop() -> None:
     Note: on free hosting the service sleeps when idle, pausing this loop; use
     the /api/v1/tick endpoint from an external cron for guaranteed cadence."""
     from app.services.email_sender import process_due_enrollments
+    from app.services.imap_reader import poll_all_replies
     from app.services.signals import run_all_enabled_sources
 
     interval = max(15, settings.scheduler_interval_seconds)
     signal_every = max(1, settings.signal_interval_seconds // interval)
+    # Check replies on a slower cadence than sends (IMAP scans are heavier).
+    reply_every = max(1, 300 // interval)
     tick = 0
     logger.info("scheduler started (interval=%ss)", interval)
     while True:
@@ -33,6 +36,11 @@ async def _scheduler_loop() -> None:
                 await run_all_enabled_sources()
             except Exception:
                 logger.exception("scheduler: signals tick failed")
+        if tick % reply_every == 0:
+            try:
+                await poll_all_replies()
+            except Exception:
+                logger.exception("scheduler: reply poll failed")
         tick += 1
         await asyncio.sleep(interval)
 

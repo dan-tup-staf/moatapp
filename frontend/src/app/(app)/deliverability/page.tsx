@@ -425,6 +425,7 @@ type Preset = {
   host: string;
   port: number;
   security: SmtpSec;
+  imapHost: string;
   instructions: { title: string; steps: string[]; link?: string };
 };
 
@@ -436,6 +437,7 @@ const PRESETS: Preset[] = [
     host: "smtp.gmail.com",
     port: 587,
     security: "starttls",
+    imapHost: "imap.gmail.com",
     instructions: {
       title: "Jak podłączyć Gmail / Google Workspace",
       steps: [
@@ -454,6 +456,7 @@ const PRESETS: Preset[] = [
     host: "smtp.office365.com",
     port: 587,
     security: "starttls",
+    imapHost: "outlook.office365.com",
     instructions: {
       title: "Jak podłączyć Outlook / Microsoft 365",
       steps: [
@@ -472,6 +475,7 @@ const PRESETS: Preset[] = [
     host: "",
     port: 587,
     security: "starttls",
+    imapHost: "",
     instructions: {
       title: "Własny serwer SMTP",
       steps: [
@@ -499,6 +503,7 @@ function AddAccountForm({
   const [smtpHost, setSmtpHost] = useState(preset.host);
   const [smtpPort, setSmtpPort] = useState(String(preset.port));
   const [security, setSecurity] = useState<SmtpSec>(preset.security);
+  const [imapHost, setImapHost] = useState(preset.imapHost);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [dailyLimit, setDailyLimit] = useState("50");
@@ -513,6 +518,7 @@ function AddAccountForm({
       setSmtpHost(p.host);
       setSmtpPort(String(p.port));
       setSecurity(p.security);
+      setImapHost(p.imapHost);
     }
   }
 
@@ -530,6 +536,8 @@ function AddAccountForm({
         smtp_username: (username.trim() || email.trim()) || null,
         smtp_password: password || null,
         smtp_security: security,
+        imap_host: imapHost.trim() || null,
+        imap_port: 993,
         daily_limit: Number(dailyLimit) || 0,
         tags: tags
           .split(",")
@@ -682,6 +690,15 @@ function AddAccountForm({
             className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
           />
         </Field>
+        <Field label="Host IMAP (wykrywanie odpowiedzi)">
+          <input
+            type="text"
+            value={imapHost}
+            onChange={(e) => setImapHost(e.target.value)}
+            placeholder="imap.gmail.com (opcjonalnie)"
+            className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          />
+        </Field>
         <Field label="Dzienny limit">
           <input
             type="number"
@@ -704,7 +721,9 @@ function AddAccountForm({
 
       <p className="text-xs text-gray-500">
         Hasło jest szyfrowane przy zapisie. Po dodaniu wyślemy testowy mail na
-        Twój adres, aby potwierdzić, że wysyłka działa.
+        Twój adres, aby potwierdzić, że wysyłka działa. Podaj host IMAP, aby
+        MOATION wykrywał odpowiedzi i automatycznie wstrzymywał follow-upy (port
+        993, te same login i hasło co SMTP).
       </p>
 
       {error && (

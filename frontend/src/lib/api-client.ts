@@ -71,6 +71,8 @@ export type EmailAccount = {
   smtp_port: number | null;
   smtp_username: string | null;
   smtp_security: SmtpSecurity;
+  imap_host: string | null;
+  imap_port: number;
   has_password: boolean;
   verified: boolean;
   last_test_at: string | null;
@@ -91,6 +93,8 @@ export type EmailAccountCreate = {
   smtp_username?: string | null;
   smtp_password?: string | null;
   smtp_security?: SmtpSecurity;
+  imap_host?: string | null;
+  imap_port?: number;
   daily_limit?: number;
   tags?: string[];
 };
@@ -103,6 +107,8 @@ export type EmailAccountUpdate = {
   smtp_username?: string | null;
   smtp_password?: string | null;
   smtp_security?: SmtpSecurity;
+  imap_host?: string | null;
+  imap_port?: number;
   daily_limit?: number;
   tags?: string[];
   warmup_status?: WarmupStatus;

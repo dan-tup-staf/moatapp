@@ -52,6 +52,8 @@ async def create_account(
         smtp_username=payload.smtp_username,
         smtp_password_enc=encrypt(payload.smtp_password or ""),
         smtp_security=payload.smtp_security.value,
+        imap_host=payload.imap_host,
+        imap_port=payload.imap_port,
         daily_limit=payload.daily_limit,
         tags=join_tags(payload.tags),
     )

@@ -26,6 +26,8 @@ class EmailAccountCreate(BaseModel):
     smtp_username: str | None = Field(default=None, max_length=255)
     smtp_password: str | None = Field(default=None, max_length=512)
     smtp_security: SmtpSecurity = SmtpSecurity.STARTTLS
+    imap_host: str | None = Field(default=None, max_length=255)
+    imap_port: int = Field(default=993, ge=1, le=65535)
     daily_limit: int = Field(default=50, ge=0, le=100000)
     tags: list[str] = Field(default_factory=list)
 
@@ -39,6 +41,8 @@ class EmailAccountUpdate(BaseModel):
     # Omit to keep the existing password; pass a new value to replace it.
     smtp_password: str | None = Field(default=None, max_length=512)
     smtp_security: SmtpSecurity | None = None
+    imap_host: str | None = Field(default=None, max_length=255)
+    imap_port: int | None = Field(default=None, ge=1, le=65535)
     daily_limit: int | None = Field(default=None, ge=0, le=100000)
     tags: list[str] | None = None
     warmup_status: WarmupStatus | None = None
@@ -56,6 +60,8 @@ class EmailAccountRead(BaseModel):
     smtp_port: int | None
     smtp_username: str | None
     smtp_security: SmtpSecurity = SmtpSecurity.STARTTLS
+    imap_host: str | None = None
+    imap_port: int = 993
     # Never expose the password; just whether one is stored.
     has_password: bool = False
     verified: bool = False

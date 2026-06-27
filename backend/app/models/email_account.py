@@ -48,6 +48,14 @@ class EmailAccount(Base):
     smtp_security: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default="starttls"
     )
+    # IMAP for reply detection (login reuses smtp_username + smtp_password).
+    imap_host: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    imap_port: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="993"
+    )
+    last_reply_check_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Whether the last "test connection" succeeded.
     verified: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
