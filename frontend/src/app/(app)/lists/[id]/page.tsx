@@ -3,8 +3,26 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
+import { ArrowLeft, Pencil, Trash2, Upload, UserPlus, Users } from "lucide-react";
 
 import { api, ApiError, Lead, LeadList } from "@/lib/api-client";
+
+const AVATARS = [
+  "bg-violet-500",
+  "bg-blue-500",
+  "bg-emerald-500",
+  "bg-amber-500",
+  "bg-rose-500",
+  "bg-sky-500",
+];
+
+const LEAD_STATUS_STYLES: Record<string, string> = {
+  new: "bg-gray-100 text-gray-700",
+  contacted: "bg-blue-100 text-blue-800",
+  replied: "bg-emerald-100 text-emerald-800",
+  bounced: "bg-red-100 text-red-800",
+  unsubscribed: "bg-yellow-100 text-yellow-800",
+};
 
 export default function ListDetailPage() {
   const params = useParams<{ id: string }>();
@@ -164,8 +182,12 @@ export default function ListDetailPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/lists" className="text-sm text-gray-500 hover:underline">
-          ← Wszystkie listy
+        <Link
+          href="/lists"
+          className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Wszystkie listy
         </Link>
         {editingField === "name" ? (
           <input
@@ -191,9 +213,7 @@ export default function ListDetailPage() {
             title="Kliknij aby zmienić nazwę"
           >
             {list.name}
-            <span className="text-xs font-normal text-gray-400 opacity-0 group-hover:opacity-100">
-              ✎
-            </span>
+            <Pencil className="h-3.5 w-3.5 text-gray-400 opacity-0 group-hover:opacity-100" />
           </h2>
         )}
         {editingField === "desc" ? (
@@ -220,9 +240,7 @@ export default function ListDetailPage() {
             title="Kliknij aby zmienić opis"
           >
             {list.description}
-            <span className="text-xs text-gray-400 opacity-0 group-hover:opacity-100">
-              ✎
-            </span>
+            <Pencil className="h-3 w-3 text-gray-400 opacity-0 group-hover:opacity-100" />
           </p>
         ) : (
           <button
@@ -240,9 +258,10 @@ export default function ListDetailPage() {
       {/* Add lead form */}
       <form
         onSubmit={handleAdd}
-        className="rounded-lg border border-gray-200 bg-white p-4"
+        className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
       >
-        <h3 className="mb-3 text-sm font-medium text-gray-700">
+        <h3 className="mb-3 flex items-center gap-1.5 text-sm font-medium text-gray-700">
+          <UserPlus className="h-4 w-4 text-gray-400" />
           Dodaj lead ręcznie
         </h3>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -297,9 +316,12 @@ export default function ListDetailPage() {
       {/* CSV import */}
       <form
         onSubmit={handleImport}
-        className="rounded-lg border border-gray-200 bg-white p-4"
+        className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
       >
-        <h3 className="mb-1 text-sm font-medium text-gray-700">Import CSV</h3>
+        <h3 className="mb-1 flex items-center gap-1.5 text-sm font-medium text-gray-700">
+          <Upload className="h-4 w-4 text-gray-400" />
+          Import CSV
+        </h3>
         <p className="mb-3 text-xs text-gray-500">
           Wymagana kolumna: <code className="rounded bg-gray-100 px-1">email</code>.
           Opcjonalne: <code className="rounded bg-gray-100 px-1">first_name</code>,{" "}
@@ -331,66 +353,96 @@ export default function ListDetailPage() {
       </form>
 
       {/* Leads table */}
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
         {leads.length === 0 ? (
-          <p className="p-4 text-sm text-gray-500">
-            Brak leadów. Dodaj ręcznie albo zaimportuj CSV.
-          </p>
+          <div className="p-8 text-center">
+            <Users className="mx-auto h-8 w-8 text-gray-300" />
+            <p className="mt-2 text-sm text-gray-500">
+              Brak leadów. Dodaj ręcznie albo zaimportuj CSV.
+            </p>
+          </div>
         ) : (
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-2 text-left font-medium text-gray-700">
-                  Email
+                <th className="px-4 py-2.5 text-left font-medium text-gray-600">
+                  Osoba
                 </th>
-                <th className="px-4 py-2 text-left font-medium text-gray-700">
-                  Imię i nazwisko
+                <th className="px-4 py-2.5 text-left font-medium text-gray-600">
+                  Firma / stanowisko
                 </th>
-                <th className="px-4 py-2 text-left font-medium text-gray-700">
-                  Firma
-                </th>
-                <th className="px-4 py-2 text-left font-medium text-gray-700">
-                  Stanowisko
-                </th>
-                <th className="px-4 py-2 text-left font-medium text-gray-700">
+                <th className="px-4 py-2.5 text-left font-medium text-gray-600">
                   Status
                 </th>
-                <th className="px-4 py-2 text-right font-medium text-gray-700">
+                <th className="px-4 py-2.5 text-right font-medium text-gray-600">
                   Score
                 </th>
-                <th className="px-4 py-2"></th>
+                <th className="px-4 py-2.5"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
-              {leads.map((l) => (
-                <tr key={l.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 text-gray-900">{l.email}</td>
-                  <td className="px-4 py-2 text-gray-700">
-                    {[l.first_name, l.last_name].filter(Boolean).join(" ") ||
-                      "—"}
-                  </td>
-                  <td className="px-4 py-2 text-gray-700">
-                    {l.company || "—"}
-                  </td>
-                  <td className="px-4 py-2 text-gray-700">{l.title || "—"}</td>
-                  <td className="px-4 py-2">
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
-                      {l.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-right font-mono text-gray-900">
-                    {l.score}
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <button
-                      onClick={() => handleDeleteLead(l.id)}
-                      className="text-xs text-red-600 hover:underline"
-                    >
-                      Usuń
-                    </button>
-                  </td>
-                </tr>
-              ))}
+            <tbody className="divide-y divide-gray-100">
+              {leads.map((l, i) => {
+                const name =
+                  [l.first_name, l.last_name].filter(Boolean).join(" ") ||
+                  l.email;
+                const ini =
+                  (
+                    (l.first_name?.[0] ?? "") + (l.last_name?.[0] ?? "")
+                  ).toUpperCase() ||
+                  l.email[0]?.toUpperCase() ||
+                  "?";
+                return (
+                  <tr key={l.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${
+                            AVATARS[i % AVATARS.length]
+                          }`}
+                        >
+                          {ini}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate font-medium text-gray-900">
+                            {name}
+                          </div>
+                          <div className="truncate text-xs text-gray-500">
+                            {l.email}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <div className="text-gray-900">{l.company || "—"}</div>
+                      {l.title && (
+                        <div className="text-xs text-gray-500">{l.title}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs ${
+                          LEAD_STATUS_STYLES[l.status] ??
+                          "bg-gray-100 text-gray-700"
+                        }`}
+                      >
+                        {l.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-900">
+                      {l.score}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button
+                        onClick={() => handleDeleteLead(l.id)}
+                        title="Usuń leada"
+                        className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

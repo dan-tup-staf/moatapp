@@ -3,6 +3,16 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import {
+  ArrowLeft,
+  Building2,
+  Check,
+  ChevronRight,
+  Clock,
+  FileText,
+  MapPin,
+  Trash2,
+} from "lucide-react";
 
 import { api, ApiError, Signal, SignalSummary } from "@/lib/api-client";
 
@@ -120,9 +130,10 @@ export default function SignalDetailPage() {
       <div>
         <Link
           href="/signals"
-          className="text-sm text-gray-500 hover:underline"
+          className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900"
         >
-          ← Wszystkie sygnały
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Wszystkie sygnały
         </Link>
         <h2 className="mt-1 text-2xl font-bold tracking-tight">
           {summary?.source_name ?? `Source #${sourceId}`}
@@ -255,33 +266,45 @@ function CompanyGroup({
   const totalImpact = linked.reduce((a, s) => a + s.score_weight, 0);
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white">
+    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between p-4 text-left hover:bg-gray-50"
+        className="flex w-full items-center justify-between gap-3 p-4 text-left hover:bg-gray-50"
       >
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-gray-900">{company}</span>
-            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
-              {items.length}{" "}
-              {items.length === 1 ? "oferta" : "ofert"}
-            </span>
-            {linked.length > 0 && (
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">
-                ✓ zlinkowane +{totalImpact}
-              </span>
-            )}
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-600">
+            <Building2 className="h-4 w-4" />
           </div>
-          <p className="mt-1 truncate text-sm text-gray-500">
-            {items[0].title}
-            {items.length > 1 ? ` + ${items.length - 1} ${items.length - 1 === 1 ? "inna" : "innych"}` : ""}
-          </p>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-gray-900">{company}</span>
+              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-600">
+                {items.length} {items.length === 1 ? "oferta" : "ofert"}
+              </span>
+              {linked.length > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] text-emerald-800">
+                  <Check className="h-3 w-3" />
+                  zlinkowane +{totalImpact}
+                </span>
+              )}
+            </div>
+            <p className="mt-1 truncate text-sm text-gray-500">
+              {items[0].title}
+              {items.length > 1
+                ? ` + ${items.length - 1} ${items.length - 1 === 1 ? "inna" : "innych"}`
+                : ""}
+            </p>
+          </div>
         </div>
-        <span className="ml-3 text-gray-400">{open ? "▾" : "▸"}</span>
+        <ChevronRight
+          className={
+            "h-4 w-4 shrink-0 text-gray-400 transition-transform " +
+            (open ? "rotate-90" : "")
+          }
+        />
       </button>
       {open && (
-        <ul className="divide-y divide-gray-200 border-t border-gray-200">
+        <ul className="divide-y divide-gray-100 border-t border-gray-100">
           {items.map((s) => (
             <li key={s.id} className="p-4">
               <SignalRow signal={s} onDelete={onDelete} compact />
@@ -306,7 +329,10 @@ function SignalRow({
     <div className="flex items-start justify-between gap-4">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 text-xs text-gray-500">
-          <span>{new Date(s.detected_at).toLocaleString("pl-PL")}</span>
+          <span className="inline-flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            {new Date(s.detected_at).toLocaleString("pl-PL")}
+          </span>
           <span className="rounded-full bg-gray-100 px-2 py-0.5">
             +{s.score_weight}
           </span>
@@ -337,21 +363,26 @@ function SignalRow({
         {(typeof s.payload.workplace === "string" ||
           Array.isArray(s.payload.work_modes) ||
           Array.isArray(s.payload.contract_types)) && (
-          <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
+          <div className="mt-1.5 flex flex-wrap gap-2 text-xs text-gray-500">
             {typeof s.payload.workplace === "string" &&
               s.payload.workplace && (
-                <span>📍 {s.payload.workplace as string}</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5">
+                  <MapPin className="h-3 w-3" />
+                  {s.payload.workplace as string}
+                </span>
               )}
             {Array.isArray(s.payload.work_modes) &&
               (s.payload.work_modes as string[]).length > 0 && (
-                <span>
-                  🏢 {(s.payload.work_modes as string[]).join(", ")}
+                <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5">
+                  <Building2 className="h-3 w-3" />
+                  {(s.payload.work_modes as string[]).join(", ")}
                 </span>
               )}
             {Array.isArray(s.payload.contract_types) &&
               (s.payload.contract_types as string[]).length > 0 && (
-                <span>
-                  📝 {(s.payload.contract_types as string[]).join(", ")}
+                <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5">
+                  <FileText className="h-3 w-3" />
+                  {(s.payload.contract_types as string[]).join(", ")}
                 </span>
               )}
           </div>
@@ -369,8 +400,9 @@ function SignalRow({
           )}
 
         {s.lead_email ? (
-          <p className="mt-2 text-xs text-emerald-700">
-            ✓ powiązane z <span className="font-medium">{s.lead_email}</span>
+          <p className="mt-2 inline-flex items-center gap-1 text-xs text-emerald-700">
+            <Check className="h-3 w-3" />
+            powiązane z <span className="font-medium">{s.lead_email}</span>
           </p>
         ) : (
           <p className="mt-2 text-xs text-gray-400">bez powiązania z leadem</p>
@@ -379,9 +411,10 @@ function SignalRow({
 
       <button
         onClick={() => onDelete(s.id)}
-        className="shrink-0 text-xs text-red-600 hover:underline"
+        title="Usuń sygnał"
+        className="shrink-0 rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
       >
-        Usuń
+        <Trash2 className="h-4 w-4" />
       </button>
     </div>
   );
