@@ -192,6 +192,90 @@ def _split_addrs(raw: str | None) -> list[str]:
     return [a.strip() for a in raw.replace(";", ",").split(",") if a.strip()]
 
 
+# ---------- LinkedIn (Voyager) step delivery ----------
+
+
+async def _resolve_linkedin(db: AsyncSession, user_id: int):
+    """First active, connected LinkedIn account for the user, or None."""
+    from app.models.linkedin_account import LinkedInAccount
+
+    return (
+        await db.execute(
+            select(LinkedInAccount)
+            .where(
+                LinkedInAccount.user_id == user_id,
+                LinkedInAccount.active.is_(True),
+            )
+            .order_by(LinkedInAccount.id.asc())
+        )
+    ).scalars().first()
+
+
+async def _linkedin_sent_today(
+    db: AsyncSession, user_id: int, channel: str
+) -> int:
+    """Count today's successful LinkedIn actions of a given channel for this
+    user — used to enforce per-account daily caps."""
+    day_start = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    stmt = (
+        select(func.count())
+        .select_from(Message)
+        .join(SequenceStep, Message.step_id == SequenceStep.id)
+        .join(Campaign, SequenceStep.campaign_id == Campaign.id)
+        .where(
+            Campaign.user_id == user_id,
+            SequenceStep.channel == channel,
+            Message.status == "sent",
+            Message.sent_at.isnot(None),
+            Message.sent_at >= day_start,
+        )
+    )
+    return int((await db.execute(stmt)).scalar() or 0)
+
+
+async def _send_linkedin(db, enr, campaign, lead, step, account, kind: str):
+    """Render the step and fire the LinkedIn action via Voyager. Records a
+    Message row (channel marked in subject) so per-step stats work."""
+    from app.services import linkedin as voyager
+
+    icp = await _get_icp(db, campaign.user_id)
+    extra = _icp_merge_tags(icp.icp_fields if icp else None)
+    text = render_template(step.body_template, lead, extra)
+
+    msg = Message(
+        enrollment_id=enr.id,
+        step_id=step.id,
+        subject=f"[LinkedIn {kind}]",
+        body=text,
+        to_email=(lead.email or lead.linkedin_url or "linkedin")[:255],
+        from_email=campaign.from_email,
+        status="sent",
+    )
+    db.add(msg)
+    await db.flush()
+
+    try:
+        if not lead.linkedin_url:
+            raise voyager.LinkedInError("Lead nie ma adresu profilu LinkedIn")
+        profile = await voyager.resolve_profile(account, lead.linkedin_url)
+        urn = profile["member_urn"]
+        if kind == "invite":
+            await voyager.send_invitation(account, urn, message=text[:300])
+        else:
+            await voyager.send_message(account, urn, text)
+        msg.sent_at = datetime.now(timezone.utc)
+        msg.status = "sent"
+        if lead.status == "new":
+            lead.status = "contacted"
+    except Exception as e:  # noqa: BLE001
+        logger.exception("LinkedIn %s failed for enrollment %s", kind, enr.id)
+        msg.status = "failed"
+        msg.error = str(e)[:1000]
+    return msg
+
+
 async def _send_via_smtp(
     *,
     to_email: str,
@@ -361,10 +445,33 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
 
     step = steps[enr.current_step]
 
-    # Non-email channels (LinkedIn visit/invite/message) are visual-only for
-    # MVP — we record nothing and just advance the enrollment so the sequence
-    # doesn't get stuck. User handles LinkedIn manually via the UI.
-    if step.channel != "email":
+    # LinkedIn invite/message steps fire via Voyager when a LinkedIn account is
+    # connected; otherwise they stay manual (advance, no record). Other non-email
+    # channels (linkedin_visit / call / whatsapp / task) are manual — advance.
+    if step.channel in ("linkedin_invite", "linkedin_message"):
+        li = await _resolve_linkedin(db, campaign.user_id)
+        if li is None:
+            msg = None  # no connected account → manual, just advance
+        else:
+            kind = "invite" if step.channel == "linkedin_invite" else "message"
+            limit = (
+                li.daily_limit_invites
+                if kind == "invite"
+                else li.daily_limit_messages
+            )
+            sent_today = await _linkedin_sent_today(
+                db, campaign.user_id, step.channel
+            )
+            if limit > 0 and sent_today >= limit:
+                # Daily cap hit — defer to tomorrow without advancing the step.
+                tomorrow = (
+                    datetime.now(timezone.utc) + timedelta(days=1)
+                ).replace(hour=9, minute=0, second=0, microsecond=0)
+                enr.next_send_at = tomorrow
+                await db.commit()
+                return None
+            msg = await _send_linkedin(db, enr, campaign, lead, step, li, kind)
+    elif step.channel != "email":
         msg = None
     else:
         # Respect the campaign sending window — if outside it, defer this
