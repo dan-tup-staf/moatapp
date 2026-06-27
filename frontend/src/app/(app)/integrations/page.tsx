@@ -1,6 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  ArrowLeftToLine,
+  ArrowRightToLine,
+  Building2,
+  ChevronDown,
+  Construction,
+  Mail,
+  type LucideIcon,
+  Sparkles,
+} from "lucide-react";
 
 import { api, ApiError, EmailStatus } from "@/lib/api-client";
 
@@ -119,6 +129,18 @@ const KIND_STYLES: Record<Integration["kind"], string> = {
   Email: "bg-emerald-100 text-emerald-800",
 };
 
+const KIND_ICONS: Record<Integration["kind"], LucideIcon> = {
+  CRM: Building2,
+  Enrichment: Sparkles,
+  Email: Mail,
+};
+
+const KIND_ACCENTS: Record<Integration["kind"], string> = {
+  CRM: "bg-purple-100 text-purple-700",
+  Enrichment: "bg-blue-100 text-blue-700",
+  Email: "bg-emerald-100 text-emerald-700",
+};
+
 export default function IntegrationsPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -133,14 +155,18 @@ export default function IntegrationsPage() {
 
       <MailboxCard />
 
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-        <p className="font-medium">🚧 Roadmap — jeszcze niezaimplementowane</p>
-        <p className="mt-1 text-xs text-amber-800">
-          Wszystkie integracje poniżej to placeholders. Architektura jest
-          gotowa (hook points w signal service, campaign sender, pipeline
-          service), ale faktyczne wywołania cudzych API wymagają kluczy klienta
-          i OAuth flow — będziemy dodawać per klient gdy pojawi się potrzeba.
-        </p>
+      <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <Construction className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+        <div>
+          <p className="font-medium">Roadmap — jeszcze niezaimplementowane</p>
+          <p className="mt-1 text-xs text-amber-800">
+            Wszystkie integracje poniżej to placeholders. Architektura jest
+            gotowa (hook points w signal service, campaign sender, pipeline
+            service), ale faktyczne wywołania cudzych API wymagają kluczy
+            klienta i OAuth flow — będziemy dodawać per klient gdy pojawi się
+            potrzeba.
+          </p>
+        </div>
       </div>
 
       <div className="space-y-3">
@@ -202,25 +228,32 @@ function MailboxCard() {
       : "brak";
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className="flex min-w-0 gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+            <Mail className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-gray-900">
               Skrzynka wysyłkowa (SMTP)
             </span>
-            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">
-              Email
-            </span>
             {!loading && (
               <span
                 className={
-                  "rounded-full px-2 py-0.5 text-xs " +
+                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] " +
                   (configured
                     ? "bg-emerald-100 text-emerald-800"
                     : "bg-amber-100 text-amber-800")
                 }
               >
+                <span
+                  className={
+                    "h-1.5 w-1.5 rounded-full " +
+                    (configured ? "bg-emerald-500" : "bg-amber-500")
+                  }
+                />
                 {configured ? "Podłączona" : "Nie skonfigurowana"}
               </span>
             )}
@@ -244,6 +277,7 @@ function MailboxCard() {
               · Limit/dzień: {status.daily_limit || "∞"}
             </p>
           )}
+          </div>
         </div>
         <button
           onClick={sendTest}
@@ -285,25 +319,33 @@ function IntegrationCard({
   expanded: boolean;
   onToggle: () => void;
 }) {
+  const Icon = KIND_ICONS[i.kind];
   return (
-    <div className="rounded-lg border border-gray-200 bg-white">
+    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
       <button
         onClick={onToggle}
         className="flex w-full items-start justify-between gap-3 p-4 text-left hover:bg-gray-50"
       >
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-gray-900">{i.name}</span>
-            <span
-              className={`rounded-full px-2 py-0.5 text-xs ${KIND_STYLES[i.kind]}`}
-            >
-              {i.kind}
-            </span>
-            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-              {i.status === "coming_soon" ? "Coming soon" : "Available"}
-            </span>
+        <div className="flex min-w-0 flex-1 gap-3">
+          <div
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${KIND_ACCENTS[i.kind]}`}
+          >
+            <Icon className="h-4 w-4" />
           </div>
-          <p className="mt-1 text-sm text-gray-600">{i.description}</p>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-gray-900">{i.name}</span>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[11px] ${KIND_STYLES[i.kind]}`}
+              >
+                {i.kind}
+              </span>
+              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-600">
+                {i.status === "coming_soon" ? "Wkrótce" : "Dostępne"}
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-gray-600">{i.description}</p>
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <button
@@ -314,27 +356,33 @@ function IntegrationCard({
                   `Implementacja per klient gdy pojawi się potrzeba.`,
               );
             }}
-            className="rounded-md border border-gray-300 px-3 py-1 text-xs text-gray-500 hover:bg-gray-100"
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-400 hover:bg-gray-100"
             disabled
             title="Nie zaimplementowane"
           >
             Połącz
           </button>
-          <span className="text-gray-400">{expanded ? "▾" : "▸"}</span>
+          <ChevronDown
+            className={
+              "h-4 w-4 text-gray-400 transition-transform " +
+              (expanded ? "rotate-180" : "")
+            }
+          />
         </div>
       </button>
 
       {expanded && (
-        <div className="grid grid-cols-1 gap-4 border-t border-gray-200 p-4 text-sm md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 border-t border-gray-100 bg-gray-50/50 p-4 text-sm md:grid-cols-2">
           {i.push.length > 0 && (
             <div>
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-gray-500">
+                <ArrowRightToLine className="h-3.5 w-3.5 text-emerald-500" />
                 Push (MOATION → {i.name})
               </p>
-              <ul className="space-y-1 text-gray-700">
+              <ul className="space-y-1.5 text-gray-700">
                 {i.push.map((p) => (
                   <li key={p} className="flex gap-2">
-                    <span className="text-gray-400">→</span>
+                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-emerald-400" />
                     <span>{p}</span>
                   </li>
                 ))}
@@ -343,13 +391,14 @@ function IntegrationCard({
           )}
           {i.pull.length > 0 && (
             <div>
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-gray-500">
+                <ArrowLeftToLine className="h-3.5 w-3.5 text-blue-500" />
                 Pull ({i.name} → MOATION)
               </p>
-              <ul className="space-y-1 text-gray-700">
+              <ul className="space-y-1.5 text-gray-700">
                 {i.pull.map((p) => (
                   <li key={p} className="flex gap-2">
-                    <span className="text-gray-400">←</span>
+                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-blue-400" />
                     <span>{p}</span>
                   </li>
                 ))}
