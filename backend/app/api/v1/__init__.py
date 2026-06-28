@@ -23,6 +23,7 @@ from app.api.v1 import (
     signal_sources,
     signals,
     track,
+    trigger_integrations,
     watchlists,
     webhooks,
 )
@@ -39,6 +40,7 @@ api_router.include_router(signal_sources.router)
 api_router.include_router(scoring.router)
 api_router.include_router(enrichment.router)
 api_router.include_router(crm_integrations.router)
+api_router.include_router(trigger_integrations.router)
 api_router.include_router(watchlists.router)
 api_router.include_router(signals.router)
 api_router.include_router(dashboard.router)

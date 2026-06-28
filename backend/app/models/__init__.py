@@ -15,6 +15,7 @@ from app.models.sequence_step import SequenceStep
 from app.models.sequence_template import SequenceTemplate
 from app.models.signal import Signal
 from app.models.signal_source import SignalSource
+from app.models.trigger_integration import TriggerIntegration
 from app.models.user import User
 from app.models.watchlist import Watchlist, WatchlistEntity
 from app.models.webhook import Webhook
@@ -41,4 +42,5 @@ __all__ = [
     "ScoringConfig",
     "EnrichmentIntegration",
     "CrmIntegration",
+    "TriggerIntegration",
 ]

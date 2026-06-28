@@ -356,6 +356,17 @@ export type CampaignUpdate = Partial<CampaignCreate> & {
   goal_deal_value?: number | null;
 };
 
+export type TriggerProvider = {
+  key: string;
+  name: string;
+  description: string;
+  docs_url: string;
+  connect_kind: string;
+  key_hint: string;
+  connected: boolean;
+  token_masked: string | null;
+};
+
 export type CrmProvider = {
   key: string;
   name: string;
@@ -1525,6 +1536,19 @@ export const api = {
         `/enrichment/${provider}/test`,
         { method: "POST" },
       ),
+  },
+
+  // Goal-trigger integrations (Calendly / Google Calendar)
+  triggerIntegrations: {
+    providers: () =>
+      authed<TriggerProvider[]>("/trigger-integrations/providers"),
+    connect: (provider: string, token: string) =>
+      authed<TriggerProvider>(`/trigger-integrations/${provider}/connect`, {
+        method: "POST",
+        body: JSON.stringify({ token }),
+      }),
+    disconnect: (provider: string) =>
+      authed<void>(`/trigger-integrations/${provider}`, { method: "DELETE" }),
   },
 
   // CRM integrations (Livespace / HubSpot / Pipedrive / Salesforce)
