@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   ChevronRight,
+  Download,
   Mail,
   MousePointerClick,
   Reply,
@@ -12,6 +13,58 @@ import {
 } from "lucide-react";
 
 import { api, ApiError, CampaignResult, ResultsResponse } from "@/lib/api-client";
+
+const CSV_HEADERS = [
+  "Sekwencja",
+  "Status",
+  "Zapisani",
+  "Wyslane",
+  "Otwarcia",
+  "Open %",
+  "Klikniecia",
+  "Click %",
+  "Odpowiedzi",
+  "Reply %",
+  "Odbicia",
+];
+
+function csvCell(v: string | number): string {
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function exportCsv(rows: CampaignResult[]) {
+  const lines = [CSV_HEADERS.join(",")];
+  for (const c of rows) {
+    lines.push(
+      [
+        c.name,
+        c.status,
+        c.enrolled,
+        c.sent,
+        c.opened,
+        c.open_rate,
+        c.clicked,
+        c.click_rate,
+        c.replied,
+        c.reply_rate,
+        c.bounced,
+      ]
+        .map(csvCell)
+        .join(","),
+    );
+  }
+  // BOM so Excel reads UTF-8 (polskie znaki) poprawnie.
+  const blob = new Blob(["﻿" + lines.join("\n")], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "moation-wyniki.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 const STATUS_STYLES: Record<string, string> = {
   draft: "bg-gray-100 text-gray-700",
@@ -56,12 +109,23 @@ export default function ResultsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Wyniki</h2>
-        <p className="mt-1 text-sm text-gray-600">
-          Skuteczność outreachu per sekwencja — wysłane, otwarcia, kliknięcia i
-          odpowiedzi.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">Wyniki</h2>
+          <p className="mt-1 text-sm text-gray-600">
+            Skuteczność outreachu per sekwencja — wysłane, otwarcia, kliknięcia i
+            odpowiedzi.
+          </p>
+        </div>
+        {rows.length > 0 && (
+          <button
+            onClick={() => exportCsv(rows)}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <Download className="h-4 w-4" />
+            Eksport CSV
+          </button>
+        )}
       </div>
 
       {/* Overall rate tiles */}
