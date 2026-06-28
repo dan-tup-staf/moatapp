@@ -1070,6 +1070,7 @@ async function request<T>(
   path: string,
   options: RequestInit = {},
   token?: string | null,
+  timeoutMs?: number,
 ): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -1077,7 +1078,33 @@ async function request<T>(
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`${API_URL}/api/v1${path}`, { ...options, headers });
+  // On free hosting the API spins down and cold-starts in ~50-60s. A request to
+  // a waking service can hang (the connection is held open while the container
+  // boots) instead of failing fast, which would block the caller indefinitely.
+  // Bound each attempt with a timeout so cold-start retry logic can take over.
+  const controller = timeoutMs ? new AbortController() : null;
+  const timer =
+    controller && timeoutMs
+      ? setTimeout(() => controller.abort(), timeoutMs)
+      : null;
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/api/v1${path}`, {
+      ...options,
+      headers,
+      signal: controller?.signal ?? options.signal,
+    });
+  } catch (err) {
+    // Surface an aborted (timed-out) request as a status-0 error so callers'
+    // cold-start retry treats it the same as a gateway/network failure.
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new ApiError(0, "Przekroczono czas oczekiwania na serwer.");
+    }
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -1114,17 +1141,24 @@ async function uploadFile<T>(path: string, file: File): Promise<T> {
 
 export const api = {
   // Auth
-  register: (data: { email: string; password: string; name?: string }) =>
-    request<UserRead>("/auth/register", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
+  register: (
+    data: { email: string; password: string; name?: string },
+    timeoutMs?: number,
+  ) =>
+    request<UserRead>(
+      "/auth/register",
+      { method: "POST", body: JSON.stringify(data) },
+      undefined,
+      timeoutMs,
+    ),
 
-  login: (data: { email: string; password: string }) =>
-    request<Token>("/auth/login", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
+  login: (data: { email: string; password: string }, timeoutMs?: number) =>
+    request<Token>(
+      "/auth/login",
+      { method: "POST", body: JSON.stringify(data) },
+      undefined,
+      timeoutMs,
+    ),
 
   me: () => authed<UserRead>("/auth/me"),
 

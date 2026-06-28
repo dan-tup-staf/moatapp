@@ -33,14 +33,17 @@ export default function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      // Retry through cold-start gateway errors.
-      const delays = [0, 2000, 4000];
+      // Retry through cold-start gateway errors / hangs. A cold free-tier API
+      // can hold the connection open ~50-60s while it boots, so bound each
+      // attempt with a timeout and span the retry budget across the cold start.
+      const delays = [0, 2000, 4000, 8000, 12000, 16000];
       let token: string | null = null;
       let lastErr: unknown;
       for (let i = 0; i < delays.length && token === null; i++) {
         if (delays[i]) await sleep(delays[i]);
+        if (i > 0) setNotice(`Budzę serwer… (próba ${i + 1})`);
         try {
-          token = (await api.login({ email, password })).access_token;
+          token = (await api.login({ email, password }, 25000)).access_token;
         } catch (err) {
           lastErr = err;
           const retriable =
@@ -49,6 +52,7 @@ export default function LoginPage() {
           if (!retriable) throw err;
         }
       }
+      setNotice(null);
       if (token === null) throw lastErr;
       await login(token);
       router.push("/start");

@@ -9,20 +9,27 @@ import { api, ApiError } from "@/lib/api-client";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Retry a call when the cold free-tier API returns a gateway error (502/503/504)
- * or the fetch fails at the network layer. These mean the request never reached
- * the app, so retrying is safe. 4xx (e.g. 409 email taken) is thrown immediately. */
+// Bound each attempt so a hung cold-start request (Render holds the connection
+// open for ~50-60s while the container boots) is aborted and retried instead of
+// blocking the form forever.
+const ATTEMPT_TIMEOUT_MS = 25000;
+
+/** Retry a call when the cold free-tier API returns a gateway error (502/503/504),
+ * times out, or fails at the network layer — these mean the app didn't process
+ * the request (or we couldn't confirm it did), so retrying is safe. The retry
+ * budget spans a realistic ~60s cold start. 4xx (e.g. 409 email taken) throws
+ * immediately. `fn` receives the per-attempt timeout to apply to its request. */
 async function withColdStartRetry<T>(
-  fn: () => Promise<T>,
+  fn: (timeoutMs: number) => Promise<T>,
   onAttempt?: (n: number) => void,
 ): Promise<T> {
-  const delays = [0, 2000, 4000, 7000];
+  const delays = [0, 2000, 4000, 8000, 12000, 16000];
   let lastErr: unknown;
   for (let i = 0; i < delays.length; i++) {
     if (delays[i]) await sleep(delays[i]);
     onAttempt?.(i);
     try {
-      return await fn();
+      return await fn(ATTEMPT_TIMEOUT_MS);
     } catch (err) {
       lastErr = err;
       const retriable =
@@ -52,23 +59,50 @@ export default function RegisterPage() {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
+    const onAttempt = (n: number) =>
+      setError(n > 0 ? `Budzę serwer… (próba ${n + 1})` : null);
     try {
-      // The free-tier API may be cold (spun down) — the first request can hit a
-      // 502/503 during spin-up or fail at the network layer. Retry those a few
-      // times (safe: a gateway error means the app never processed the request).
-      await withColdStartRetry(
-        () => api.register({ email, password, name: name || undefined }),
-        (n) => setError(n > 0 ? `Budzę serwer… (próba ${n + 1})` : null),
-      );
-      // Registration succeeded. Auto-login is best-effort — if it lags, send the
-      // user to login rather than making it look like signup failed.
+      // The free-tier API may be cold (spun down) — the first request can hang,
+      // hit a 502/503 during spin-up, or fail at the network layer. Retry those
+      // (a gateway/timeout error means we couldn't confirm the app processed it).
+      let registered = true;
       try {
-        const { access_token } = await withColdStartRetry(() =>
-          api.login({ email, password }),
+        await withColdStartRetry(
+          (t) => api.register({ email, password, name: name || undefined }, t),
+          onAttempt,
+        );
+      } catch (err) {
+        // A retried signup can re-send a registration the server already
+        // committed, yielding a 409 even though the account WAS created. Don't
+        // fail outright: fall through to login and let it disambiguate — a 409
+        // for a genuinely taken email will surface as a 401 there.
+        if (err instanceof ApiError && err.status === 409) {
+          registered = false;
+        } else {
+          throw err;
+        }
+      }
+
+      // Auto-login. Doubles as the 409 check above: success means the account is
+      // ours; a 401 after a 409 means the email really belongs to someone else.
+      try {
+        const { access_token } = await withColdStartRetry(
+          (t) => api.login({ email, password }, t),
+          onAttempt,
         );
         await login(access_token);
         router.push("/start");
-      } catch {
+      } catch (loginErr) {
+        if (
+          !registered &&
+          loginErr instanceof ApiError &&
+          loginErr.status === 401
+        ) {
+          setError("Konto z tym adresem e-mail już istnieje — zaloguj się.");
+          return;
+        }
+        // Account exists but auto-login lagged — send to login rather than
+        // making it look like signup failed.
         router.push("/login?registered=1");
       }
     } catch (err) {
