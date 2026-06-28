@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
@@ -21,9 +22,16 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> U
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="User with this email already exists",
+            detail="Konto z tym adresem e-mail już istnieje — zaloguj się.",
         )
-    return await create_user(db, payload.email, payload.password, payload.name)
+    try:
+        return await create_user(db, payload.email, payload.password, payload.name)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Konto z tym adresem e-mail już istnieje — zaloguj się.",
+        ) from None
 
 
 @router.post("/login", response_model=Token)

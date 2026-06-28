@@ -2,10 +2,37 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 import { useAuth } from "@/contexts/auth-context";
 import { api, ApiError } from "@/lib/api-client";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Retry a call when the cold free-tier API returns a gateway error (502/503/504)
+ * or the fetch fails at the network layer. These mean the request never reached
+ * the app, so retrying is safe. 4xx (e.g. 409 email taken) is thrown immediately. */
+async function withColdStartRetry<T>(
+  fn: () => Promise<T>,
+  onAttempt?: (n: number) => void,
+): Promise<T> {
+  const delays = [0, 2000, 4000, 7000];
+  let lastErr: unknown;
+  for (let i = 0; i < delays.length; i++) {
+    if (delays[i]) await sleep(delays[i]);
+    onAttempt?.(i);
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const retriable =
+        !(err instanceof ApiError) ||
+        [502, 503, 504, 0].includes(err.status);
+      if (!retriable) throw err;
+    }
+  }
+  throw lastErr;
+}
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -16,18 +43,40 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Wake the free-tier API on mount so it's warm by the time the user submits.
+  useEffect(() => {
+    api.warmUp();
+  }, []);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
-      await api.register({ email, password, name: name || undefined });
-      // Auto-login po rejestracji
-      const { access_token } = await api.login({ email, password });
-      await login(access_token);
-      router.push("/start");
+      // The free-tier API may be cold (spun down) — the first request can hit a
+      // 502/503 during spin-up or fail at the network layer. Retry those a few
+      // times (safe: a gateway error means the app never processed the request).
+      await withColdStartRetry(
+        () => api.register({ email, password, name: name || undefined }),
+        (n) => setError(n > 0 ? `Budzę serwer… (próba ${n + 1})` : null),
+      );
+      // Registration succeeded. Auto-login is best-effort — if it lags, send the
+      // user to login rather than making it look like signup failed.
+      try {
+        const { access_token } = await withColdStartRetry(() =>
+          api.login({ email, password }),
+        );
+        await login(access_token);
+        router.push("/start");
+      } catch {
+        router.push("/login?registered=1");
+      }
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : "Błąd rejestracji");
+      setError(
+        err instanceof ApiError
+          ? err.detail
+          : "Nie udało się połączyć z serwerem. Spróbuj ponownie za chwilę.",
+      );
     } finally {
       setSubmitting(false);
     }

@@ -1128,6 +1128,10 @@ export const api = {
 
   me: () => authed<UserRead>("/auth/me"),
 
+  // Wake the (possibly spun-down) API; best-effort, ignores failures.
+  warmUp: () =>
+    fetch(`${API_URL}/api/v1/health`, { cache: "no-store" }).catch(() => {}),
+
   // Account / billing
   account: {
     overview: () => authed<AccountOverview>("/account/overview"),

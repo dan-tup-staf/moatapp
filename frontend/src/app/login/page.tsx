@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 import { useAuth } from "@/contexts/auth-context";
 import { api, ApiError } from "@/lib/api-client";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,15 +15,42 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    api.warmUp();
+    if (
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("registered") === "1"
+    ) {
+      setNotice("Konto utworzone — zaloguj się.");
+    }
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
-      const { access_token } = await api.login({ email, password });
-      await login(access_token);
+      // Retry through cold-start gateway errors.
+      const delays = [0, 2000, 4000];
+      let token: string | null = null;
+      let lastErr: unknown;
+      for (let i = 0; i < delays.length && token === null; i++) {
+        if (delays[i]) await sleep(delays[i]);
+        try {
+          token = (await api.login({ email, password })).access_token;
+        } catch (err) {
+          lastErr = err;
+          const retriable =
+            !(err instanceof ApiError) ||
+            [502, 503, 504, 0].includes(err.status);
+          if (!retriable) throw err;
+        }
+      }
+      if (token === null) throw lastErr;
+      await login(token);
       router.push("/start");
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : "Błąd logowania");
@@ -37,6 +66,12 @@ export default function LoginPage() {
           <h1 className="text-2xl font-bold tracking-tight">Zaloguj się</h1>
           <p className="mt-1 text-sm text-gray-500">do MOATION</p>
         </div>
+
+        {notice && (
+          <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+            {notice}
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
