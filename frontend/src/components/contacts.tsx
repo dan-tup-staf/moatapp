@@ -339,11 +339,15 @@ function CsvImportTab({ onDone }: { onDone: () => void }) {
   return (
     <form onSubmit={submit} className="space-y-3">
       <p className="text-sm text-gray-500">
-        Wgraj plik CSV z kolumnami: <code className="rounded bg-gray-100 px-1">email</code>,{" "}
+        Wgraj plik CSV z kolumną{" "}
+        <code className="rounded bg-gray-100 px-1">email</code> (wymagana) oraz
+        opcjonalnie{" "}
         <code className="rounded bg-gray-100 px-1">first_name</code>,{" "}
         <code className="rounded bg-gray-100 px-1">last_name</code>,{" "}
         <code className="rounded bg-gray-100 px-1">company</code>,{" "}
-        <code className="rounded bg-gray-100 px-1">title</code>.
+        <code className="rounded bg-gray-100 px-1">title</code>. Rozpoznajemy też
+        eksporty z Apollo / Lusha / Sales Navigator (nagłówki typu „Email”,
+        „First Name”, „Company”) oraz separator przecinek lub średnik.
       </p>
       <input
         type="text"
