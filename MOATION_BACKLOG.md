@@ -56,6 +56,37 @@ Do zrobienia progresywnie (duże, mechaniczne):
 - [ ] Przetłumaczyć treść ekranów na EN (rozszerzać słownik + owijać stringi `t()`).
 > Status: powłoka działa, treść ekranów dochodzi etapami.
 
+## „Cel sekwencji” — domknięcie lejka do CRM — 🔜 (zaprojektowane z userem)
+Spinamy sekwencję klamrą: **ostatni etap każdej sekwencji = „Cel sekwencji”**
+(konwersja). Gdy cel zostanie osiągnięty, lead trafia do CRM jako jedno z (user
+wybiera): **Kontakt**, **Zadanie dla handlowca**, albo **Szansa sprzedaży (deal)**.
+
+Cel ma **typ/trigger** (co liczy się jako konwersja), np.:
+- „Umówienie spotkania w **Calendly**” (webhook Calendly: invitee.created).
+- „Potwierdzenie spotkania w **Google Meet/Calendar**” (event potwierdzony).
+- „Przesłanie **formularza kontaktowego** ze strony na Demo produktowe”
+  (hostowany formularz / embed → webhook do nas).
+- (oraz proste: odpowiedź pozytywna / ręczne oznaczenie outcome = converted).
+
+Każdy z tych triggerów → akcja w CRM: dodaj **kontakt** / **zadanie** / **deal**.
+
+Do zbudowania:
+- [ ] Pole celu na kampanii: `goal_type` (trigger) + `crm_action`
+      (contact|task|deal) + `crm_target` (na razie generyczny webhook; natywne
+      CRM = osobny temat) + opcje (np. nazwa zadania, wartość deala).
+- [ ] UI w detalu sekwencji: stały „kafel” Cel sekwencji na końcu kroków
+      (wygląd jak etap), z konfiguracją triggera i akcji CRM.
+- [ ] Detekcja triggerów:
+      - Calendly: endpoint webhooka + podpięcie konta (klucz/sygnatura).
+      - Google Meet/Calendar: potwierdzenie eventu (OAuth Google — patrz decyzje).
+      - Formularz Demo: hostowany formularz MOATION lub embed + webhook.
+- [ ] Wykonanie akcji CRM przy osiągnięciu celu (reuse `services/webhooks.py`
+      `fire(...)` z eventem `goal_reached`, payload contact/task/deal),
+      aktualizacja enrollment.outcome → converted.
+> Zależności/decyzje: docelowy CRM (HubSpot/Pipedrive/Salesforce natywnie vs
+> webhook), OAuth Google, klucz Calendly — dopisać do `TODO_USER.md` gdy ruszymy.
+> Dziś działa już generyczny webhook (lead_replied/outcome_changed) — to baza.
+
 ## Panel użytkownika (realny, nie placeholder) — 🔜
 - [ ] **Profil**: zmiana imienia, e-maila, hasła; avatar (opcjonalnie).
 - [ ] **Konto/plan**: aktualny plan, zużycie vs limity, upgrade/downgrade.
