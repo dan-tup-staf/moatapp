@@ -22,6 +22,7 @@ import {
 import {
   api,
   ApiError,
+  Campaign,
   CompanyRow,
   IcpFields,
   IcpProfile,
@@ -30,6 +31,7 @@ import {
   PersonRow,
   ScoringConfig,
   SignalSource,
+  SignalSummary,
   SourceType,
   SuggestedSource,
 } from "@/lib/api-client";
@@ -964,6 +966,13 @@ type SortPeople = "score" | "recent" | "name" | "signals";
 
 const PEOPLE_PAGE = 200;
 
+type PeopleFacets = {
+  list_id?: number;
+  company?: string;
+  campaign_id?: number;
+  signal_source_id?: number;
+};
+
 export function PeoplePanel() {
   const [rows, setRows] = useState<PersonRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -973,9 +982,20 @@ export function PeoplePanel() {
   const [sort, setSort] = useState<SortPeople>("score");
   const [query, setQuery] = useState("");
   const [cfg, setCfg] = useState<ScoringConfig>({ tier1_min: 100, tier2_min: 20 });
+  const [facets, setFacets] = useState<PeopleFacets>({});
+
+  // Facet option sources
+  const [lists, setLists] = useState<LeadList[]>([]);
+  const [companies, setCompanies] = useState<CompanyRow[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [sources, setSources] = useState<SignalSummary[]>([]);
 
   useEffect(() => {
     api.scoring.get().then(setCfg).catch(() => {});
+    api.lists.list().then(setLists).catch(() => {});
+    api.companies.list().then(setCompanies).catch(() => {});
+    api.campaigns.list().then(setCampaigns).catch(() => {});
+    api.signals.summary().then(setSources).catch(() => {});
   }, []);
 
   function describeError(err: unknown): string {
@@ -984,16 +1004,25 @@ export function PeoplePanel() {
       : `Błąd ładowania: ${err instanceof Error ? err.message : String(err)}`;
   }
 
-  async function load(q: string, offset: number, append: boolean) {
+  async function load(
+    q: string,
+    offset: number,
+    append: boolean,
+    f: PeopleFacets,
+  ) {
     if (append) setLoadingMore(true);
     else setLoading(true);
     setError(null);
     try {
-      const items = await api.people.list({ limit: PEOPLE_PAGE, offset, q });
+      const items = await api.people.list({
+        limit: PEOPLE_PAGE,
+        offset,
+        q,
+        ...f,
+      });
       setRows((prev) => (append ? [...prev, ...items] : items));
-      // Total is a separate, cheap call (best-effort; falls back to length).
       try {
-        const { total } = await api.people.count(q);
+        const { total } = await api.people.count({ q, ...f });
         setTotal(total);
       } catch {
         setTotal(offset + items.length);
@@ -1006,12 +1035,27 @@ export function PeoplePanel() {
     }
   }
 
-  // Initial load + debounced server-side search on query change.
+  // Reload on search or facet change (debounced for search).
   useEffect(() => {
-    const t = setTimeout(() => load(query, 0, false), query ? 300 : 0);
+    const t = setTimeout(() => load(query, 0, false, facets), query ? 300 : 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query]);
+  }, [query, facets]);
+
+  function setFacet(key: keyof PeopleFacets, value: number | string | undefined) {
+    setFacets((prev) => {
+      const next = { ...prev };
+      if (value === undefined || value === "" || prev[key] === value) {
+        delete next[key];
+      } else {
+        // @ts-expect-error union assignment is fine for our keys
+        next[key] = value;
+      }
+      return next;
+    });
+  }
+
+  const activeFacetCount = Object.keys(facets).length;
 
   // Sort only the loaded page client-side.
   const sorted = [...rows].sort((a, b) => {
@@ -1025,14 +1069,6 @@ export function PeoplePanel() {
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
   const hasMore = rows.length < total;
-
-  if (loading) return <p className="text-sm text-gray-500">Ładowanie...</p>;
-  if (error)
-    return (
-      <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-        {error}
-      </p>
-    );
 
   return (
     <div className="space-y-4">
@@ -1065,7 +1101,26 @@ export function PeoplePanel() {
         </div>
       </div>
 
-      {sorted.length === 0 ? (
+      <PeopleFacetBar
+        facets={facets}
+        activeCount={activeFacetCount}
+        lists={lists}
+        companies={companies}
+        campaigns={campaigns}
+        sources={sources}
+        onSet={setFacet}
+        onClear={() => setFacets({})}
+      />
+
+      {error && (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+
+      {loading ? (
+        <p className="py-8 text-center text-sm text-gray-500">Ładowanie…</p>
+      ) : sorted.length === 0 ? (
         <div className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center">
           <Users className="mx-auto h-8 w-8 text-gray-300" />
           <p className="mt-2 text-sm text-gray-500">
@@ -1177,7 +1232,7 @@ export function PeoplePanel() {
           {hasMore && (
             <div className="border-t border-gray-100 p-3 text-center">
               <button
-                onClick={() => load(query, rows.length, true)}
+                onClick={() => load(query, rows.length, true, facets)}
                 disabled={loadingMore}
                 className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
@@ -1188,6 +1243,139 @@ export function PeoplePanel() {
             </div>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+function FacetSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (v: string) => void;
+}) {
+  const active = value !== "";
+  const current = options.find((o) => o.value === value);
+  return (
+    <div
+      className={
+        "relative inline-flex items-center rounded-md border px-1 " +
+        (active
+          ? "border-indigo-400 bg-indigo-50"
+          : "border-gray-300 bg-white")
+      }
+    >
+      <span
+        className={
+          "pl-2 text-xs font-medium " +
+          (active ? "text-indigo-700" : "text-gray-500")
+        }
+      >
+        {label}
+        {active && current ? `: ${current.label}` : ""}
+      </span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="cursor-pointer appearance-none bg-transparent py-1.5 pl-1 pr-6 text-xs text-transparent focus:outline-none"
+        style={{ minWidth: 24 }}
+      >
+        <option value="">— wszystkie —</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value} className="text-gray-900">
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <span className="pointer-events-none absolute right-2 text-gray-400">
+        ▾
+      </span>
+    </div>
+  );
+}
+
+function PeopleFacetBar({
+  facets,
+  activeCount,
+  lists,
+  companies,
+  campaigns,
+  sources,
+  onSet,
+  onClear,
+}: {
+  facets: PeopleFacets;
+  activeCount: number;
+  lists: LeadList[];
+  companies: CompanyRow[];
+  campaigns: Campaign[];
+  sources: SignalSummary[];
+  onSet: (key: keyof PeopleFacets, value: number | string | undefined) => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-gray-50/60 px-3 py-2">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+        Filtruj:
+      </span>
+
+      <FacetSelect
+        label="Listy"
+        value={facets.list_id != null ? String(facets.list_id) : ""}
+        options={lists.map((l) => ({
+          value: String(l.id),
+          label: l.name,
+        }))}
+        onChange={(v) => onSet("list_id", v ? Number(v) : undefined)}
+      />
+
+      <FacetSelect
+        label="Sygnały"
+        value={
+          facets.signal_source_id != null
+            ? String(facets.signal_source_id)
+            : ""
+        }
+        options={sources.map((s) => ({
+          value: String(s.source_id),
+          label: s.source_name,
+        }))}
+        onChange={(v) =>
+          onSet("signal_source_id", v ? Number(v) : undefined)
+        }
+      />
+
+      <FacetSelect
+        label="Firmy"
+        value={facets.company ?? ""}
+        options={companies
+          .filter((c) => c.company)
+          .map((c) => ({ value: c.company, label: c.company }))}
+        onChange={(v) => onSet("company", v || undefined)}
+      />
+
+      <FacetSelect
+        label="Kampanie"
+        value={facets.campaign_id != null ? String(facets.campaign_id) : ""}
+        options={campaigns.map((c) => ({
+          value: String(c.id),
+          label: c.name,
+        }))}
+        onChange={(v) => onSet("campaign_id", v ? Number(v) : undefined)}
+      />
+
+      {activeCount > 0 && (
+        <button
+          onClick={onClear}
+          className="ml-auto text-xs text-gray-500 underline hover:text-gray-900"
+        >
+          Wyczyść filtry ({activeCount})
+        </button>
       )}
     </div>
   );

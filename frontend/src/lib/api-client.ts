@@ -862,6 +862,30 @@ export type PeopleResponse = {
   items: PersonRow[];
 };
 
+export type PeopleQuery = {
+  limit?: number;
+  offset?: number;
+  q?: string;
+  list_id?: number;
+  company?: string;
+  campaign_id?: number;
+  signal_source_id?: number;
+};
+
+function peopleParams(opts: PeopleQuery): URLSearchParams {
+  const p = new URLSearchParams();
+  if (opts.limit !== undefined) p.set("limit", String(opts.limit));
+  if (opts.offset !== undefined) p.set("offset", String(opts.offset));
+  if (opts.q && opts.q.trim()) p.set("q", opts.q.trim());
+  if (opts.list_id !== undefined) p.set("list_id", String(opts.list_id));
+  if (opts.company) p.set("company", opts.company);
+  if (opts.campaign_id !== undefined)
+    p.set("campaign_id", String(opts.campaign_id));
+  if (opts.signal_source_id !== undefined)
+    p.set("signal_source_id", String(opts.signal_source_id));
+  return p;
+}
+
 export type SignalSummary = {
   source_id: number;
   source_name: string;
@@ -1681,20 +1705,12 @@ export const api = {
     list: () => authed<CompanyRow[]>("/companies"),
   },
   people: {
-    list: (
-      opts: { limit?: number; offset?: number; q?: string } = {},
-    ) => {
-      const params = new URLSearchParams();
-      params.set("limit", String(opts.limit ?? 200));
-      params.set("offset", String(opts.offset ?? 0));
-      if (opts.q && opts.q.trim()) params.set("q", opts.q.trim());
-      return authed<PersonRow[]>(`/people?${params.toString()}`);
-    },
-    count: (q?: string) => {
-      const params = new URLSearchParams();
-      if (q && q.trim()) params.set("q", q.trim());
-      return authed<{ total: number }>(`/people/count?${params.toString()}`);
-    },
+    list: (opts: PeopleQuery = {}) =>
+      authed<PersonRow[]>(`/people?${peopleParams(opts).toString()}`),
+    count: (opts: PeopleQuery = {}) =>
+      authed<{ total: number }>(
+        `/people/count?${peopleParams(opts).toString()}`,
+      ),
   },
 
   icp: {

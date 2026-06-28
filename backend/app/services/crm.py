@@ -148,7 +148,14 @@ async def list_companies_for_user(
 
 
 async def count_people_for_user(
-    db: AsyncSession, user_id: int, q: str | None = None
+    db: AsyncSession,
+    user_id: int,
+    q: str | None = None,
+    *,
+    list_id: int | None = None,
+    company: str | None = None,
+    campaign_id: int | None = None,
+    signal_source_id: int | None = None,
 ) -> int:
     stmt = (
         select(func.count(Lead.id))
@@ -156,6 +163,9 @@ async def count_people_for_user(
         .where(LeadList.user_id == user_id)
     )
     stmt = _apply_people_search(stmt, q)
+    stmt = _apply_people_filters(
+        stmt, user_id, list_id, company, campaign_id, signal_source_id
+    )
     return int((await db.execute(stmt)).scalar_one() or 0)
 
 
@@ -172,17 +182,57 @@ def _apply_people_search(stmt, q: str | None):
     return stmt
 
 
+def _apply_people_filters(
+    stmt,
+    user_id: int,
+    list_id: int | None,
+    company: str | None,
+    campaign_id: int | None,
+    signal_source_id: int | None,
+):
+    """Clickable facets for the Osoby tab: list, company, campaign, signal
+    source. Campaign/signal use EXISTS-style IN subqueries so no row blow-up."""
+    if list_id is not None:
+        stmt = stmt.where(Lead.list_id == list_id)
+    if company:
+        stmt = stmt.where(func.lower(Lead.company) == company.lower())
+    if campaign_id is not None:
+        sub = (
+            select(CampaignEnrollment.lead_id)
+            .join(Campaign, Campaign.id == CampaignEnrollment.campaign_id)
+            .where(
+                Campaign.user_id == user_id,
+                CampaignEnrollment.campaign_id == campaign_id,
+            )
+        )
+        stmt = stmt.where(Lead.id.in_(sub))
+    if signal_source_id is not None:
+        sub = (
+            select(Signal.lead_id)
+            .where(
+                Signal.source_id == signal_source_id,
+                Signal.lead_id.isnot(None),
+            )
+        )
+        stmt = stmt.where(Lead.id.in_(sub))
+    return stmt
+
+
 async def list_people_for_user(
     db: AsyncSession,
     user_id: int,
     limit: int = 200,
     offset: int = 0,
     q: str | None = None,
+    *,
+    list_id: int | None = None,
+    company: str | None = None,
+    campaign_id: int | None = None,
+    signal_source_id: int | None = None,
 ) -> list[dict]:
     """Paginated list of leads across the user's lists, with denormalized
-    list_name, signals_count per lead, and last_message_sent_at. Paginating
-    server-side keeps the Osoby tab fast even with thousands of leads (a single
-    huge payload was timing out on the hosting free tier)."""
+    list_name, signals_count per lead, and last_message_sent_at. Supports
+    clickable facet filters (list / company / campaign / signal source)."""
     # Page of lead ids first (cheap), then enrich just that page.
     page_stmt = (
         select(Lead.id)
@@ -190,6 +240,9 @@ async def list_people_for_user(
         .where(LeadList.user_id == user_id)
     )
     page_stmt = _apply_people_search(page_stmt, q)
+    page_stmt = _apply_people_filters(
+        page_stmt, user_id, list_id, company, campaign_id, signal_source_id
+    )
     page_stmt = (
         page_stmt.order_by(Lead.score.desc(), Lead.created_at.desc())
         .limit(limit)
