@@ -715,6 +715,14 @@ export type ProspectSearchRequest = {
   title?: string | null;
   company?: string | null;
   size?: string | null;
+  headcount?: string | null;
+  revenue?: string | null;
+  funding?: string | null;
+  technology?: string | null;
+  year_founded?: string | null;
+  intent?: string | null;
+  seniority?: string | null;
+  department?: string | null;
   max_results?: number;
 };
 

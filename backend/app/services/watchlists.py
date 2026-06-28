@@ -370,6 +370,10 @@ def _build_query(req: ProspectSearchRequest) -> str:
     if is_person:
         if req.title:
             parts.append(f'"{req.title}"')
+        if req.seniority:
+            parts.append(req.seniority)
+        if req.department:
+            parts.append(req.department)
         if req.company:
             parts.append(req.company)
         if req.keywords:
@@ -378,6 +382,8 @@ def _build_query(req: ProspectSearchRequest) -> str:
             parts.append(req.industry)
         if req.location:
             parts.append(req.location)
+        if req.technology:
+            parts.append(req.technology)
         parts.append("site:linkedin.com/in")
     else:
         if req.keywords:
@@ -386,8 +392,18 @@ def _build_query(req: ProspectSearchRequest) -> str:
             parts.append(req.industry)
         if req.location:
             parts.append(req.location)
-        if req.size:
-            parts.append(req.size)
+        if req.technology:
+            parts.append(req.technology)
+        if req.funding:
+            parts.append(req.funding)
+        if req.intent:
+            parts.append(req.intent)
+        if req.year_founded:
+            parts.append(f"founded {req.year_founded}")
+        # Headcount/revenue/size are soft hints appended as plain terms.
+        for hint in (req.size, req.headcount, req.revenue):
+            if hint:
+                parts.append(hint)
         parts.append("firma OR company")
     return " ".join(p for p in parts if p).strip()
 

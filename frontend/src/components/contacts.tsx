@@ -31,6 +31,7 @@ import {
   SuggestedSource,
 } from "@/lib/api-client";
 import { ClientProfileSection } from "@/components/client-profile-editor";
+import { ProspectFinderButton } from "@/components/prospect-finder";
 
 const EMPTY_ICP_FIELDS: IcpFields = {
   target_industries: [],
@@ -90,12 +91,15 @@ export function ListsPanel() {
         <p className="text-sm text-gray-500">
           {loading ? "" : `${lists.length} ${lists.length === 1 ? "lista" : "list"}`}
         </p>
-        <button
-          onClick={() => setShowAdd(true)}
-          className="inline-flex items-center gap-1.5 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
-        >
-          <Plus className="h-4 w-4" /> Dodaj prospektów
-        </button>
+        <div className="flex items-center gap-2">
+          <ProspectFinderButton defaultKind="company" />
+          <button
+            onClick={() => setShowAdd(true)}
+            className="inline-flex items-center gap-1.5 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+          >
+            <Plus className="h-4 w-4" /> Dodaj prospektów
+          </button>
+        </div>
       </div>
 
       {error && (

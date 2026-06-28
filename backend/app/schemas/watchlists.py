@@ -115,8 +115,9 @@ class CsvImportResult(BaseModel):
 
 
 class ProspectSearchRequest(BaseModel):
-    """Filter-driven discovery of companies or people. Backed by the active web
-    search provider (Brave / SerpAPI / DuckDuckGo) — no paid data vendor."""
+    """Filter-driven discovery of companies or people (Lusha / Prospeo-style).
+    Backed by the active web search provider (Brave / SerpAPI / DuckDuckGo) —
+    no paid data vendor, so filters are turned into search terms."""
 
     kind: EntityKind = EntityKind.COMPANY
     keywords: str | None = Field(default=None, max_length=255)
@@ -125,6 +126,16 @@ class ProspectSearchRequest(BaseModel):
     title: str | None = Field(default=None, max_length=255)
     company: str | None = Field(default=None, max_length=255)
     size: str | None = Field(default=None, max_length=64)
+    # Rich company filters
+    headcount: str | None = Field(default=None, max_length=64)
+    revenue: str | None = Field(default=None, max_length=64)
+    funding: str | None = Field(default=None, max_length=128)
+    technology: str | None = Field(default=None, max_length=128)
+    year_founded: str | None = Field(default=None, max_length=32)
+    intent: str | None = Field(default=None, max_length=128)
+    # Rich contact filters
+    seniority: str | None = Field(default=None, max_length=64)
+    department: str | None = Field(default=None, max_length=64)
     max_results: int = Field(default=20, ge=1, le=50)
 
 
