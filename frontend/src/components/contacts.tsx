@@ -753,7 +753,13 @@ export function PeoplePanel() {
       try {
         setRows(await api.people.list());
       } catch (err) {
-        setError(err instanceof ApiError ? err.detail : "Błąd ładowania");
+        setError(
+          err instanceof ApiError
+            ? `Błąd ${err.status}: ${err.detail}`
+            : `Błąd ładowania: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+        );
       } finally {
         setLoading(false);
       }

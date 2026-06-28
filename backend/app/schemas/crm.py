@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict
 
 
 class CompanyRow(BaseModel):
@@ -23,7 +23,7 @@ class PersonRow(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    email: EmailStr
+    email: str
     first_name: str | None
     last_name: str | None
     company: str | None
