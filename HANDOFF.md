@@ -1,6 +1,7 @@
 # MOATION — kontekst do kontynuacji (handoff)
 
-Czytaj to na start w nowym oknie. Plus `UX_PLAN.md` (pełny backlog/specyfikacja).
+Czytaj to na start w nowym oknie. Plus `MOATION_BACKLOG.md` (aktualne zadania do
+zbudowania), `TODO_USER.md` (co musi zrobić user) i `UX_PLAN.md` (specyfikacja).
 
 ## Czym jest MOATION
 B2B SaaS do outreachu opartego o sygnały zakupowe (intent data). Stack:
@@ -11,9 +12,10 @@ B2B SaaS do outreachu opartego o sygnały zakupowe (intent data). Stack:
   `backend/app/llm.py` (Gemini albo Anthropic — pierwszy skonfigurowany wygrywa).
 
 ## ⚠️ Workflow gita/deployu (KLUCZOWE)
-- Pracujemy na branchu **`claude/moation-project-sections-6avucy`**, ALE **Render
-  buduje `main`**. Dlatego **po KAŻDEJ zmianie: commit → merge --ff-only do `main`
-  → push `main` i push brancha**. Inaczej user nie zobaczy zmian.
+- Pracujemy na branchu **`claude/awesome-babbage-hjyva9`** (zmienia się per sesja),
+  ALE **Render buduje `main`**. Dlatego **po KAŻDEJ zmianie: commit → merge
+  --ff-only do `main` → push `main` i push brancha**. Inaczej user nie zobaczy
+  zmian.
 - Render: **`moation-api`** (backend) i **`moation-web`** (frontend). Deploy
   `moation-api` odpala `alembic upgrade head` (migracje w `backend/alembic/versions/`).
 - Po zmianach user robi „Deploy latest commit" (lub ma Auto-Deploy: Yes).
