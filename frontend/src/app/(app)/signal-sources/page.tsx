@@ -5,6 +5,7 @@ import {
   Banknote,
   Bell,
   Briefcase,
+  Eye,
   Globe,
   type LucideIcon,
   MessageCircle,
@@ -23,6 +24,7 @@ import {
   SignalSource,
   SignalSourcePreset,
   SourceType,
+  Watchlist,
 } from "@/lib/api-client";
 
 type Tab = "presety" | "web" | "pracuj_pl" | "rss";
@@ -118,6 +120,9 @@ export default function SignalSourcesPage() {
   const [webDomain, setWebDomain] = useState("");
   const [webMax, setWebMax] = useState(15);
   const [webScore, setWebScore] = useState(20);
+  const [webWatchlistId, setWebWatchlistId] = useState<number | "">("");
+
+  const [watchlists, setWatchlists] = useState<Watchlist[]>([]);
 
   // RSS form
   const [rssName, setRssName] = useState("");
@@ -180,6 +185,7 @@ export default function SignalSourcesPage() {
   useEffect(() => {
     refresh();
     api.signalSources.searchProvider().then(setProvider).catch(() => {});
+    api.watchlists.list().then(setWatchlists).catch(() => {});
   }, []);
 
   const activeChannel = WEB_CHANNELS.find((c) => c.value === webChannel)!;
@@ -187,8 +193,10 @@ export default function SignalSourcesPage() {
   async function handleCreateWeb(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!webQuery.trim()) {
-      setError("Podaj zapytanie wyszukiwania");
+    if (!webQuery.trim() && webWatchlistId === "") {
+      setError(
+        "Podaj zapytanie wyszukiwania lub podepnij listę obserwowaną",
+      );
       return;
     }
     setCreating(true);
@@ -198,6 +206,7 @@ export default function SignalSourcesPage() {
         max_results: webMax,
       };
       if (webDomain.trim()) config.company_domain = webDomain.trim();
+      if (webWatchlistId !== "") config.watchlist_id = webWatchlistId;
       await api.signalSources.create({
         name: webName,
         type: webChannel,
@@ -209,6 +218,7 @@ export default function SignalSourcesPage() {
       setWebDomain("");
       setWebMax(15);
       setWebScore(20);
+      setWebWatchlistId("");
       await refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : "Błąd tworzenia");
@@ -430,13 +440,48 @@ export default function SignalSourcesPage() {
               className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
             />
             <textarea
-              required
+              required={webWatchlistId === ""}
               rows={2}
-              placeholder={`Zapytanie wyszukiwania, np.: ${activeChannel.placeholder}`}
+              placeholder={
+                webWatchlistId !== ""
+                  ? "Słowa-kluczowe sygnału (opcjonalne) — doklejane do każdej firmy/osoby z listy, np.: finansowanie OR nowy CFO OR ekspansja"
+                  : `Zapytanie wyszukiwania, np.: ${activeChannel.placeholder}`
+              }
               value={webQuery}
               onChange={(e) => setWebQuery(e.target.value)}
               className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
             />
+            <div className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
+              <label className="flex items-center gap-2 text-sm font-medium text-indigo-900">
+                <Eye className="h-4 w-4" />
+                Lista obserwowana (opcjonalnie)
+              </label>
+              <p className="mt-0.5 text-xs text-indigo-700/80">
+                Podepnij listę firm/osób — źródło będzie szukać sygnałów osobno
+                dla każdej pozycji z listy (zamiast jednego ogólnego zapytania).
+              </p>
+              <select
+                value={webWatchlistId}
+                onChange={(e) =>
+                  setWebWatchlistId(
+                    e.target.value === "" ? "" : Number(e.target.value),
+                  )
+                }
+                className="mt-2 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="">— bez listy (jedno zapytanie) —</option>
+                {watchlists.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name} ({w.entities_count} poz.)
+                  </option>
+                ))}
+              </select>
+              {watchlists.length === 0 && (
+                <p className="mt-1 text-xs text-gray-500">
+                  Nie masz jeszcze list — utwórz je w „Listy obserwowane”.
+                </p>
+              )}
+            </div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               <input
                 type="text"
@@ -683,6 +728,14 @@ export default function SignalSourcesPage() {
                         )}
 
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                          {typeof s.config.watchlist_id === "number" && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 font-medium text-indigo-600">
+                              <Eye className="h-3 w-3" />
+                              {watchlists.find(
+                                (w) => w.id === s.config.watchlist_id,
+                              )?.name || `lista #${s.config.watchlist_id}`}
+                            </span>
+                          )}
                           <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-gray-600">
                             waga {s.score_weight}
                           </span>

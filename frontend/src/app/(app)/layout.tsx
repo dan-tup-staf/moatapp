@@ -11,6 +11,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   CreditCard,
+  Eye,
   Flame,
   Globe,
   Inbox,
@@ -41,6 +42,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/icp", label: "Profil klienta", icon: Target },
       { href: "/signal-sources", label: "Źródła sygnałów", icon: Radar },
+      { href: "/watchlists", label: "Listy obserwowane", icon: Eye },
     ],
   },
   {

@@ -657,6 +657,85 @@ export type SignalSourcePreset = {
   config: Record<string, unknown>;
 };
 
+// ---------- Watchlists ----------
+
+export type EntityKind = "company" | "person";
+
+export type WatchlistEntity = {
+  id: number;
+  watchlist_id: number;
+  kind: EntityKind;
+  name: string;
+  company: string | null;
+  domain: string | null;
+  linkedin_url: string | null;
+  title: string | null;
+  location: string | null;
+  industry: string | null;
+  extra: Record<string, unknown>;
+  created_at: string;
+};
+
+export type Watchlist = {
+  id: number;
+  name: string;
+  description: string;
+  kind: string;
+  source_url: string | null;
+  created_at: string;
+  updated_at: string;
+  entities_count: number;
+  companies_count: number;
+  people_count: number;
+};
+
+export type WatchlistDetail = Watchlist & {
+  entities: WatchlistEntity[];
+};
+
+export type EntityCreate = {
+  kind?: EntityKind;
+  name: string;
+  company?: string | null;
+  domain?: string | null;
+  linkedin_url?: string | null;
+  title?: string | null;
+  location?: string | null;
+  industry?: string | null;
+  extra?: Record<string, unknown>;
+};
+
+export type EntityUpdate = Partial<Omit<EntityCreate, "extra">>;
+
+export type ProspectSearchRequest = {
+  kind?: EntityKind;
+  keywords?: string | null;
+  industry?: string | null;
+  location?: string | null;
+  title?: string | null;
+  company?: string | null;
+  size?: string | null;
+  max_results?: number;
+};
+
+export type ProspectCandidate = {
+  kind: EntityKind;
+  name: string;
+  company?: string | null;
+  domain?: string | null;
+  linkedin_url?: string | null;
+  title?: string | null;
+  location?: string | null;
+  industry?: string | null;
+  summary?: string | null;
+  source_url?: string | null;
+};
+
+export type ProspectSearchResult = {
+  provider: string;
+  candidates: ProspectCandidate[];
+};
+
 export type CompanyRow = {
   company: string;
   leads_count: number;
@@ -1303,6 +1382,83 @@ export const api = {
       authed<RunAllResult>(`/signal-sources/run-all`, { method: "POST" }),
     searchProvider: () =>
       authed<string>(`/signal-sources/search-provider`),
+  },
+
+  // Watchlists (companies / people to track)
+  watchlists: {
+    list: () => authed<Watchlist[]>("/watchlists"),
+
+    create: (data: {
+      name: string;
+      description?: string;
+      kind?: string;
+      source_url?: string | null;
+    }) =>
+      authed<Watchlist>("/watchlists", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+
+    get: (id: number) => authed<WatchlistDetail>(`/watchlists/${id}`),
+
+    update: (
+      id: number,
+      data: {
+        name?: string;
+        description?: string;
+        kind?: string;
+        source_url?: string | null;
+      },
+    ) =>
+      authed<Watchlist>(`/watchlists/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+
+    delete: (id: number) =>
+      authed<void>(`/watchlists/${id}`, { method: "DELETE" }),
+
+    entities: (id: number) =>
+      authed<WatchlistEntity[]>(`/watchlists/${id}/entities`),
+
+    addEntities: (id: number, entities: EntityCreate[]) =>
+      authed<WatchlistEntity[]>(`/watchlists/${id}/entities`, {
+        method: "POST",
+        body: JSON.stringify({ entities }),
+      }),
+
+    updateEntity: (id: number, eid: number, data: EntityUpdate) =>
+      authed<WatchlistEntity>(`/watchlists/${id}/entities/${eid}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+
+    deleteEntity: (id: number, eid: number) =>
+      authed<void>(`/watchlists/${id}/entities/${eid}`, { method: "DELETE" }),
+
+    bulkDelete: (id: number, entityIds: number[]) =>
+      authed<{ deleted: number }>(`/watchlists/${id}/entities/bulk-delete`, {
+        method: "POST",
+        body: JSON.stringify({ entity_ids: entityIds }),
+      }),
+
+    importCsv: (id: number, data: { kind: EntityKind; csv_text: string }) =>
+      authed<CsvImportResult>(`/watchlists/${id}/import-csv`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+
+    search: (data: ProspectSearchRequest) =>
+      authed<ProspectSearchResult>("/watchlists/search", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+
+    addFromSearch: (id: number, candidates: ProspectCandidate[]) =>
+      authed<WatchlistEntity[]>(`/watchlists/${id}/add-from-search`, {
+        method: "POST",
+        body: JSON.stringify({ candidates }),
+      }),
   },
 
   // Signals feed
