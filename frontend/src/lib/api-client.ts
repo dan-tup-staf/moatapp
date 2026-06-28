@@ -1664,7 +1664,12 @@ export const api = {
       params.set("limit", String(opts.limit ?? 200));
       params.set("offset", String(opts.offset ?? 0));
       if (opts.q && opts.q.trim()) params.set("q", opts.q.trim());
-      return authed<PeopleResponse>(`/people?${params.toString()}`);
+      return authed<PersonRow[]>(`/people?${params.toString()}`);
+    },
+    count: (q?: string) => {
+      const params = new URLSearchParams();
+      if (q && q.trim()) params.set("q", q.trim());
+      return authed<{ total: number }>(`/people/count?${params.toString()}`);
     },
   },
 

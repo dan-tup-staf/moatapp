@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db
 from app.deps import get_current_user
 from app.models.user import User
-from app.schemas.crm import CompanyRow, PeopleResponse, PersonRow
+from app.schemas.crm import CompanyRow, PersonRow
 from app.services import crm as svc
 
 router = APIRouter(tags=["crm"])
@@ -19,19 +19,26 @@ async def list_companies(
     return [CompanyRow(**r) for r in rows]
 
 
-@router.get("/people", response_model=PeopleResponse)
+@router.get("/people", response_model=list[PersonRow])
 async def list_people(
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     q: str | None = Query(default=None),
     current: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> PeopleResponse:
+) -> list[PersonRow]:
+    """Returns a plain array (paginated by limit/offset/q). Kept as an array for
+    backward compatibility with the frontend; total is a separate endpoint."""
     rows = await svc.list_people_for_user(
         db, current.id, limit=limit, offset=offset, q=q
     )
-    total = await svc.count_people_for_user(db, current.id, q=q)
-    return PeopleResponse(
-        total=total,
-        items=[PersonRow(**r) for r in rows],
-    )
+    return [PersonRow(**r) for r in rows]
+
+
+@router.get("/people/count")
+async def people_count(
+    q: str | None = Query(default=None),
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    return {"total": await svc.count_people_for_user(db, current.id, q=q)}

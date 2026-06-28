@@ -989,9 +989,15 @@ export function PeoplePanel() {
     else setLoading(true);
     setError(null);
     try {
-      const res = await api.people.list({ limit: PEOPLE_PAGE, offset, q });
-      setTotal(res.total);
-      setRows((prev) => (append ? [...prev, ...res.items] : res.items));
+      const items = await api.people.list({ limit: PEOPLE_PAGE, offset, q });
+      setRows((prev) => (append ? [...prev, ...items] : items));
+      // Total is a separate, cheap call (best-effort; falls back to length).
+      try {
+        const { total } = await api.people.count(q);
+        setTotal(total);
+      } catch {
+        setTotal(offset + items.length);
+      }
     } catch (err) {
       setError(describeError(err));
     } finally {
