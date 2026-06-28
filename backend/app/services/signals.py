@@ -310,6 +310,40 @@ async def _link_signal_to_lead(
 # ---------- Source runner ----------
 
 
+async def _expand_configs(
+    db: AsyncSession, config: dict
+) -> list[dict]:
+    """If config references a watchlist, return one fetch-config per tracked
+    entity (base query + entity term, scoped to the entity's domain). Otherwise
+    return [config] unchanged."""
+    wl_id = config.get("watchlist_id")
+    if not wl_id:
+        return [config]
+    try:
+        from app.services.watchlists import entity_search_terms
+
+        terms = await entity_search_terms(db, int(wl_id))
+    except Exception:  # noqa: BLE001
+        logger.exception("Failed to expand watchlist %s", wl_id)
+        return [config]
+    if not terms:
+        # Watchlist attached but empty — run the base query so the source still
+        # works and surfaces an error if the query is also empty.
+        return [config]
+
+    base_query = (config.get("query") or "").strip()
+    out: list[dict] = []
+    for term, domain in terms:
+        cfg = dict(config)
+        cfg["query"] = f"{base_query} {term}".strip() if base_query else term
+        if domain:
+            cfg["company_domain"] = domain
+        # Keep per-entity result counts modest so a big watchlist stays fast.
+        cfg.setdefault("max_results", 5)
+        out.append(cfg)
+    return out
+
+
 async def run_source(db: AsyncSession, source: SignalSource) -> int:
     """Run a single source: scrape, dedup-insert signals, link each to a lead.
     Updates source.last_run_at / last_error. Returns count of NEW signals.
@@ -331,8 +365,15 @@ async def run_source(db: AsyncSession, source: SignalSource) -> int:
         )
         return 0
 
+    # If a watchlist is attached, expand the base query over each tracked
+    # company/person so the source produces per-entity signals (and tags each
+    # with the entity's domain for accurate lead-linking).
+    fetch_configs = await _expand_configs(db, source_config)
+
+    scraped = []
     try:
-        scraped = await scraper.fetch(source_config)
+        for cfg in fetch_configs:
+            scraped.extend(await scraper.fetch(cfg))
     except Exception as e:
         logger.exception("Scraper %s failed", source_id)
         await _finalize_source(db, source_id, error=str(e)[:1000])

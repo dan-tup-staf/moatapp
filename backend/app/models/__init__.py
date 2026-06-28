@@ -13,6 +13,7 @@ from app.models.sequence_template import SequenceTemplate
 from app.models.signal import Signal
 from app.models.signal_source import SignalSource
 from app.models.user import User
+from app.models.watchlist import Watchlist, WatchlistEntity
 from app.models.webhook import Webhook
 
 __all__ = [
@@ -32,4 +33,6 @@ __all__ = [
     "Webhook",
     "InboundMessage",
     "SequenceTemplate",
+    "Watchlist",
+    "WatchlistEntity",
 ]

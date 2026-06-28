@@ -43,7 +43,12 @@ from app.schemas.campaigns import (
 )
 from app.services import campaigns as svc
 from app.services import icp as icp_svc
-from app.services.email_sender import _send_via_smtp, process_due_enrollments
+from app.services.email_sender import (
+    _resolve_creds,
+    _send_via_smtp,
+    process_due_enrollments,
+    smtp_configured,
+)
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
@@ -399,6 +404,20 @@ async def test_send_step(
     extra = icp_svc.merge_tags(icp.icp_fields if icp else None)
     subject = svc.render_template(step.subject, lead, extra)
     body = svc.render_template(step.body_template, lead, extra)
+
+    # Prefer the campaign's connected mailbox; fall back to env SMTP only when
+    # it's actually configured (not the local Mailhog default).
+    creds = await _resolve_creds(db, current.id, campaign.from_email)
+    if creds is None and not smtp_configured():
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Brak podłączonej skrzynki dla adresu "
+                f"„{campaign.from_email}”. Podłącz skrzynkę w sekcji "
+                "Dostarczalność (SMTP/IMAP), wybierz ją jako adres "
+                "nadawcy kampanii, a potem wyślij test."
+            ),
+        )
     try:
         await _send_via_smtp(
             to_email=to,
@@ -406,6 +425,7 @@ async def test_send_step(
             from_name=campaign.from_name,
             subject=f"[TEST] {subject}",
             body=body,
+            creds=creds,
         )
     except Exception as e:
         raise HTTPException(
