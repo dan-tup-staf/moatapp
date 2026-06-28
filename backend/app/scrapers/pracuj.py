@@ -70,10 +70,41 @@ class PracujScraper(BaseScraper):
                     offers = await self._fetch_offers(client, kw)
                 except Exception:
                     logger.exception("pracuj.pl fetch failed for keyword %r", kw)
-                    continue
+                    offers = []
                 for off in offers[:max_per_keyword]:
                     signals.extend(self._offer_to_signals(off, kw))
+
+        # Resilience: if pracuj.pl changed its markup / blocked us and we got
+        # nothing, fall back to real DuckDuckGo results scoped to pracuj.pl so
+        # the source still surfaces live job-posting links.
+        if not signals:
+            signals = await self._ddg_fallback(keywords, max_per_keyword)
         return signals
+
+    async def _ddg_fallback(
+        self, keywords: list[str], limit: int
+    ) -> list[ScrapedSignal]:
+        from app.scrapers.ddg import ddg_results
+
+        out: list[ScrapedSignal] = []
+        for kw in keywords:
+            results = await ddg_results(
+                f"{kw} praca site:pracuj.pl", min(limit, 20)
+            )
+            for r in results:
+                out.append(
+                    ScrapedSignal(
+                        title=r["title"][:512],
+                        url=r["url"],
+                        company_domain=None,
+                        payload={
+                            "summary": r["summary"][:1000],
+                            "source": "pracuj.pl (DDG)",
+                            "search_keyword": kw,
+                        },
+                    )
+                )
+        return out
 
     async def _fetch_offers(
         self, client: httpx.AsyncClient, keyword: str

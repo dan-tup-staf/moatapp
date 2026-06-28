@@ -80,17 +80,28 @@ CHANNELS: dict[str, dict[str, Any]] = {
 }
 
 
-class WebSearchScraper(BaseScraper):
-    """Collects REAL signals from Google News RSS search.
+_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+)
 
-    Google News exposes a public RSS search endpoint that returns recent, real
-    articles matching a query — no API key, deterministic, and reachable from
-    the server. This replaced the LLM-grounded approach, which was unreliable
-    (Gemini grounding often returned an empty response). For the `company_site`
-    channel we add a `site:` filter to scope to the company's domain.
+
+class WebSearchScraper(BaseScraper):
+    """Collects REAL signals — no API key, reachable from the server.
+
+    - `google_news` → Google News RSS search (recent real articles).
+    - everything else (serp / linkedin / x_twitter / funding / company_site)
+      → real general web search via DuckDuckGo's HTML endpoint, preserving the
+      channel's `site:` filters so e.g. the `funding` channel hits Crunchbase/
+      Dealroom and `serp` hits registries (KRS/MSiG). Falls back to Google News
+      RSS when DDG returns nothing.
+
+    Replaced the LLM-grounded approach, which was unreliable (Gemini grounding
+    returned empty responses).
     """
 
     _RSS = "https://news.google.com/rss/search"
+    _DDG = "https://html.duckduckgo.com/html/"
 
     def __init__(self, channel: str) -> None:
         if channel not in CHANNELS:
@@ -99,21 +110,40 @@ class WebSearchScraper(BaseScraper):
         self.meta = CHANNELS[channel]
 
     async def fetch(self, config: dict[str, Any]) -> list[ScrapedSignal]:
-        import asyncio
-        import urllib.parse
-
-        import feedparser
-
         query = (config.get("query") or "").strip()
         if not query:
             return []
         company_domain = (config.get("company_domain") or "").strip() or None
         max_results = int(config.get("max_results", 15))
 
+        if self.channel == "google_news":
+            return await self._google_news(query, company_domain, max_results)
+
+        # General web search with the channel's site: scoping.
+        sites = list(self.meta.get("sites") or [])
+        if self.channel == "company_site" and company_domain:
+            sites = [company_domain]
+        site_filter = (
+            " (" + " OR ".join(f"site:{s}" for s in sites) + ")" if sites else ""
+        )
+        ddg = await self._ddg(f"{query}{site_filter}", company_domain, max_results)
+        if ddg:
+            return ddg
+        # Nothing on the open web → fall back to real news so the source still
+        # produces signals.
+        return await self._google_news(query, company_domain, max_results)
+
+    async def _google_news(
+        self, query: str, company_domain: str | None, max_results: int
+    ) -> list[ScrapedSignal]:
+        import asyncio
+        import urllib.parse
+
+        import feedparser
+
         q = query
         if self.channel == "company_site" and company_domain:
             q = f"{query} site:{company_domain}"
-
         url = (
             self._RSS
             + "?"
@@ -121,7 +151,6 @@ class WebSearchScraper(BaseScraper):
                 {"q": q, "hl": "pl", "gl": "PL", "ceid": "PL:pl"}
             )
         )
-
         loop = asyncio.get_event_loop()
         feed = await loop.run_in_executor(None, feedparser.parse, url)
 
@@ -130,24 +159,43 @@ class WebSearchScraper(BaseScraper):
             title = (entry.get("title") or "").strip()
             if not title:
                 continue
-            # Google News titles end with " - <Source>".
             source = ""
             if " - " in title:
                 title_clean, source = title.rsplit(" - ", 1)
                 title = title_clean.strip() or title
-            payload = {
-                "summary": (entry.get("summary") or "")[:1000],
-                "published": entry.get("published"),
-                "channel": self.channel,
-                "source": source,
-                "search_query": query,
-            }
             signals.append(
                 ScrapedSignal(
                     title=title[:512],
                     url=(entry.get("link") or None),
                     company_domain=company_domain,
-                    payload=payload,
+                    payload={
+                        "summary": (entry.get("summary") or "")[:1000],
+                        "published": entry.get("published"),
+                        "channel": self.channel,
+                        "source": source or "Google News",
+                        "search_query": query,
+                    },
                 )
             )
         return signals
+
+    async def _ddg(
+        self, query: str, company_domain: str | None, max_results: int
+    ) -> list[ScrapedSignal]:
+        from app.scrapers.ddg import ddg_results
+
+        results = await ddg_results(query, max_results)
+        return [
+            ScrapedSignal(
+                title=r["title"][:512],
+                url=r["url"],
+                company_domain=company_domain,
+                payload={
+                    "summary": r["summary"][:1000],
+                    "channel": self.channel,
+                    "source": "DuckDuckGo",
+                    "search_query": query,
+                },
+            )
+            for r in results
+        ]
