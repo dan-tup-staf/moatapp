@@ -81,8 +81,9 @@ const NAV_GROUPS: NavGroup[] = [
 const ACCOUNT_GROUP: NavGroup = {
   title: "Konto",
   items: [
-    { href: "/account/users", label: "Użytkownicy i dostępy", icon: UserCog },
+    { href: "/account/profile", label: "Profil i konto", icon: UserCog },
     { href: "/account/billing", label: "Płatności i plan", icon: CreditCard },
+    { href: "/account/users", label: "Użytkownicy i dostępy", icon: Users },
   ],
 };
 

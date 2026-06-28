@@ -20,6 +20,41 @@ export type UserRead = {
   created_at: string;
 };
 
+export type PlanLimit = {
+  key: string;
+  label: string;
+  used: number | null;
+  limit: number | null;
+};
+
+export type PlanInfo = {
+  key: string;
+  name: string;
+  price_pln: number | null;
+  period: string;
+  features: string[];
+  status: string;
+  is_current: boolean;
+  can_checkout: boolean;
+};
+
+export type AccountOverview = {
+  id: number;
+  email: string;
+  name: string | null;
+  plan: string;
+  plan_status: string;
+  billing_enabled: boolean;
+  usage: PlanLimit[];
+  plans: PlanInfo[];
+};
+
+export type CheckoutResponse = {
+  url: string | null;
+  preview: boolean;
+  message: string | null;
+};
+
 export type Token = {
   access_token: string;
   token_type: string;
@@ -1016,6 +1051,31 @@ export const api = {
     }),
 
   me: () => authed<UserRead>("/auth/me"),
+
+  // Account / billing
+  account: {
+    overview: () => authed<AccountOverview>("/account/overview"),
+    updateProfile: (data: { name?: string | null; email?: string }) =>
+      authed<UserRead>("/account/profile", {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    changePassword: (data: {
+      current_password: string;
+      new_password: string;
+    }) =>
+      authed<void>("/account/change-password", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    checkout: (plan: "pro" | "scale") =>
+      authed<CheckoutResponse>("/account/checkout", {
+        method: "POST",
+        body: JSON.stringify({ plan }),
+      }),
+    billingPortal: () =>
+      authed<CheckoutResponse>("/account/billing-portal", { method: "POST" }),
+  },
 
   // Email (sending mailbox)
   email: {

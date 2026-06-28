@@ -79,5 +79,18 @@ class Settings(BaseSettings):
     anthropic_model_fast: str = "claude-haiku-4-5"
     anthropic_model_quality: str = "claude-sonnet-4-6"
 
+    # Stripe billing (empty = billing runs in preview mode, no real charges).
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_price_pro: str = ""
+    stripe_price_scale: str = ""
+    # Public app URL used to build Checkout success/cancel return links.
+    app_base_url: str = "https://moation-web.onrender.com"
+
+    # Enrichment providers (empty = inactive; user connects per-account in-app).
+    apollo_api_key: str = ""
+    lusha_api_key: str = ""
+    prospeo_api_key: str = ""
+
 
 settings = Settings()

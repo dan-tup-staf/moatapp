@@ -21,6 +21,7 @@ dependencies = [
     "feedparser>=6.0.11",
     "beautifulsoup4>=4.12.3",
     "anthropic>=0.39.0",
+    "stripe>=10.0.0",
 ]
 
 [project.optional-dependencies]
