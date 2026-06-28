@@ -26,9 +26,11 @@ from app.schemas.campaigns import (
     EnrollmentRead,
     EnrollmentUpdate,
     EnrollResult,
+    FromTemplateRequest,
     PreviewRequest,
     PreviewResponse,
     SequenceScore,
+    SequenceTemplateInfo,
     StepCreate,
     StepRead,
     VariantStats,
@@ -117,6 +119,53 @@ async def create_one(
 ) -> CampaignRead:
     obj = await svc.create_campaign(db, current.id, payload)
     return _to_campaign_read(obj, 0, 0)
+
+
+@router.get("/templates", response_model=list[SequenceTemplateInfo])
+async def list_templates() -> list[SequenceTemplateInfo]:
+    from app.services import sequence_templates as tmpl
+
+    return [SequenceTemplateInfo(**t) for t in tmpl.list_templates()]
+
+
+@router.post(
+    "/from-template",
+    response_model=CampaignRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_from_template(
+    payload: FromTemplateRequest,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CampaignRead:
+    from app.services import sequence_templates as tmpl
+
+    t = tmpl.get_template(payload.template_id)
+    if t is None:
+        raise HTTPException(status_code=404, detail="Nie znaleziono szablonu")
+    camp = await svc.create_campaign(
+        db,
+        current.id,
+        CampaignCreate(
+            name=payload.name or t["name"],
+            from_email=payload.from_email,
+            from_name=payload.from_name,
+            group_id=payload.group_id,
+        ),
+    )
+    for i, s in enumerate(t["steps"]):
+        await svc.create_step(
+            db,
+            camp.id,
+            StepCreate(
+                step_order=i,
+                subject=s["subject"],
+                body_template=s["body_template"],
+                delay_days=s["delay_days"],
+                channel=s["channel"],
+            ),
+        )
+    return _to_campaign_read(camp, len(t["steps"]), 0)
 
 
 @router.get("/{campaign_id}", response_model=CampaignRead)

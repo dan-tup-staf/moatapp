@@ -1,9 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
-import { api, ApiError, Campaign, EmailAccount } from "@/lib/api-client";
+import {
+  api,
+  ApiError,
+  Campaign,
+  EmailAccount,
+  SequenceTemplateInfo,
+} from "@/lib/api-client";
 
 const STATUS_LABELS: Record<Campaign["status"], string> = {
   draft: "Draft",
@@ -31,7 +38,9 @@ export default function CampaignsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const router = useRouter();
   const [showForm, setShowForm] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
   const [name, setName] = useState("");
   const [fromEmail, setFromEmail] = useState("");
   const [fromName, setFromName] = useState("");
@@ -143,13 +152,34 @@ export default function CampaignsPage() {
             outreachu (kroki, odbiorcy, ustawienia, wysyłka)
           </p>
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
-        >
-          {showForm ? "Anuluj" : "+ Nowa sekwencja"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setShowTemplates((v) => !v);
+              setShowForm(false);
+            }}
+            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            {showTemplates ? "Ukryj szablony" : "Z szablonu"}
+          </button>
+          <button
+            onClick={() => {
+              setShowForm(!showForm);
+              setShowTemplates(false);
+            }}
+            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+          >
+            {showForm ? "Anuluj" : "+ Nowa sekwencja"}
+          </button>
+        </div>
       </div>
+
+      {showTemplates && (
+        <TemplatesPanel
+          accounts={accounts}
+          onCreated={(id) => router.push(`/campaigns/${id}`)}
+        />
+      )}
 
       {showForm && (
         <form
@@ -382,5 +412,134 @@ function Th({
         </span>
       </span>
     </th>
+  );
+}
+
+function TemplatesPanel({
+  accounts,
+  onCreated,
+}: {
+  accounts: EmailAccount[];
+  onCreated: (id: number) => void;
+}) {
+  const [templates, setTemplates] = useState<SequenceTemplateInfo[]>([]);
+  const [pick, setPick] = useState<SequenceTemplateInfo | null>(null);
+  const [name, setName] = useState("");
+  const [fromEmail, setFromEmail] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.campaigns.templates().then(setTemplates).catch(() => setTemplates([]));
+  }, []);
+
+  useEffect(() => {
+    if (pick) {
+      setName(pick.name);
+      if (!fromEmail && accounts[0]) setFromEmail(accounts[0].email);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pick]);
+
+  async function create() {
+    if (!pick) return;
+    setCreating(true);
+    setError(null);
+    try {
+      const c = await api.campaigns.fromTemplate({
+        template_id: pick.id,
+        from_email: fromEmail,
+        name: name.trim() || undefined,
+      });
+      onCreated(c.id);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.detail : "Błąd tworzenia");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <h3 className="text-sm font-semibold text-gray-900">
+        Szablony sekwencji
+      </h3>
+      <p className="mt-0.5 text-xs text-gray-500">
+        Gotowe sekwencje z treściami i merge-tagami — wybierz, ustaw skrzynkę i
+        utwórz. Treści edytujesz potem w krokach.
+      </p>
+
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {templates.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setPick(t)}
+            className={
+              "rounded-lg border p-3 text-left transition " +
+              (pick?.id === t.id
+                ? "border-gray-900 ring-1 ring-gray-900"
+                : "border-gray-200 hover:border-gray-300")
+            }
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-gray-900">{t.name}</span>
+              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">
+                {t.category}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-gray-500">{t.description}</p>
+            <p className="mt-1.5 text-[11px] text-gray-400">
+              {t.steps_count} kroków · {t.channels.join(", ")}
+            </p>
+          </button>
+        ))}
+      </div>
+
+      {pick && (
+        <div className="mt-4 space-y-3 rounded-lg border border-gray-200 p-3">
+          <p className="text-xs font-medium text-gray-700">
+            Tworzysz: <span className="text-gray-900">{pick.name}</span>
+          </p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Nazwa sekwencji"
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+            {accounts.length > 0 ? (
+              <select
+                value={fromEmail}
+                onChange={(e) => setFromEmail(e.target.value)}
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="">— skrzynka wysyłkowa —</option>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.email}>
+                    {a.email}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="email"
+                value={fromEmail}
+                onChange={(e) => setFromEmail(e.target.value)}
+                placeholder="from email"
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+              />
+            )}
+          </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <button
+            onClick={create}
+            disabled={creating || !fromEmail}
+            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          >
+            {creating ? "Tworzę…" : "Utwórz z szablonu"}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

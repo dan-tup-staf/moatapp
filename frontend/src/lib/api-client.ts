@@ -341,6 +341,23 @@ export type StepCreate = {
 
 export type StepUpdate = Partial<StepCreate> & { ab_auto?: boolean };
 
+export type SequenceTemplateInfo = {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  steps_count: number;
+  channels: string[];
+};
+
+export type FromTemplateRequest = {
+  template_id: string;
+  from_email: string;
+  from_name?: string | null;
+  name?: string | null;
+  group_id?: number | null;
+};
+
 export type StepVariant = {
   id: number;
   step_id: number;
@@ -1081,6 +1098,14 @@ export const api = {
 
     create: (data: CampaignCreate) =>
       authed<Campaign>("/campaigns", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+
+    templates: () =>
+      authed<SequenceTemplateInfo[]>("/campaigns/templates"),
+    fromTemplate: (data: FromTemplateRequest) =>
+      authed<Campaign>("/campaigns/from-template", {
         method: "POST",
         body: JSON.stringify(data),
       }),

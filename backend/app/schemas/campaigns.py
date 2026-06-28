@@ -106,6 +106,23 @@ class VariantRead(BaseModel):
 # ---------- Campaign ----------
 
 
+class SequenceTemplateInfo(BaseModel):
+    id: str
+    name: str
+    description: str
+    category: str
+    steps_count: int
+    channels: list[str]
+
+
+class FromTemplateRequest(BaseModel):
+    template_id: str
+    from_email: EmailStr
+    from_name: str | None = Field(default=None, max_length=255)
+    name: str | None = Field(default=None, max_length=255)
+    group_id: int | None = None
+
+
 class CampaignCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     from_email: EmailStr
