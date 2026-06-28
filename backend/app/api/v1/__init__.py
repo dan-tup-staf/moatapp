@@ -17,6 +17,7 @@ from app.api.v1 import (
     linkedin_accounts,
     lists,
     ops,
+    scoring,
     signal_sources,
     signals,
     track,
@@ -33,6 +34,7 @@ api_router.include_router(leads.router)
 api_router.include_router(campaigns.router)
 api_router.include_router(campaign_groups.router)
 api_router.include_router(signal_sources.router)
+api_router.include_router(scoring.router)
 api_router.include_router(watchlists.router)
 api_router.include_router(signals.router)
 api_router.include_router(dashboard.router)

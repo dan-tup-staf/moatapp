@@ -12,6 +12,7 @@ import {
   Flame,
   Plus,
   Search,
+  SlidersHorizontal,
   Trash2,
   Upload,
   Users,
@@ -27,6 +28,8 @@ import {
   IcpQA,
   LeadList,
   PersonRow,
+  ScoringConfig,
+  SignalSource,
   SourceType,
   SuggestedSource,
 } from "@/lib/api-client";
@@ -446,9 +449,13 @@ type SortCompanies = "score" | "leads" | "signals" | "recent";
 
 type TierKey = "all" | "t1" | "t2" | "t3" | "nq";
 
-function tierOf(score: number): Exclude<TierKey, "all"> {
-  if (score > 100) return "t1";
-  if (score > 20) return "t2";
+function tierOf(
+  score: number,
+  t1 = 100,
+  t2 = 20,
+): Exclude<TierKey, "all"> {
+  if (score > t1) return "t1";
+  if (score > t2) return "t2";
   if (score > 0) return "t3";
   return "nq";
 }
@@ -508,6 +515,164 @@ function companyInitials(name: string): string {
   return ini.toUpperCase() || "?";
 }
 
+function ScoringConfigPanel({
+  cfg,
+  onSaved,
+}: {
+  cfg: ScoringConfig;
+  onSaved: (c: ScoringConfig) => void;
+}) {
+  const [t1, setT1] = useState(cfg.tier1_min);
+  const [t2, setT2] = useState(cfg.tier2_min);
+  const [sources, setSources] = useState<SignalSource[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [savedWeight, setSavedWeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    api.signalSources.list().then(setSources).catch(() => {});
+  }, []);
+
+  async function saveThresholds() {
+    setErr(null);
+    if (t2 >= t1) {
+      setErr("Próg Tier 1 musi być wyższy niż Tier 2.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const c = await api.scoring.update({ tier1_min: t1, tier2_min: t2 });
+      onSaved(c);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.detail : "Błąd zapisu");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveWeight(id: number, weight: number) {
+    try {
+      await api.signalSources.update(id, { score_weight: weight });
+      setSources((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, score_weight: weight } : s)),
+      );
+      setSavedWeight(id);
+      setTimeout(() => setSavedWeight(null), 1200);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return (
+    <div className="space-y-5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div>
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+          <SlidersHorizontal className="h-4 w-4 text-indigo-600" />
+          Konfiguracja scoringu
+        </h3>
+        <p className="mt-1 text-xs text-gray-500">
+          Jak liczymy score: każdy <strong>sygnał</strong> dopięty do osoby z
+          firmy dodaje tej osobie tyle punktów, ile wynosi{" "}
+          <strong>waga źródła sygnału</strong>. Score firmy = suma punktów jej
+          osób. Próg decyduje, w którym tierze ląduje firma.
+        </p>
+      </div>
+
+      {/* Tier thresholds */}
+      <div className="rounded-lg border border-gray-100 bg-gray-50/60 p-4">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+          Progi tierów
+        </p>
+        <div className="flex flex-wrap items-end gap-4">
+          <label className="text-sm">
+            <span className="mb-1 block text-xs text-gray-600">
+              Tier 1 gdy score &gt;
+            </span>
+            <input
+              type="number"
+              min={1}
+              value={t1}
+              onChange={(e) => setT1(Number(e.target.value))}
+              className="w-28 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+            />
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block text-xs text-gray-600">
+              Tier 2 gdy score &gt;
+            </span>
+            <input
+              type="number"
+              min={1}
+              value={t2}
+              onChange={(e) => setT2(Number(e.target.value))}
+              className="w-28 rounded-md border border-gray-300 px-3 py-1.5 text-sm"
+            />
+          </label>
+          <p className="text-xs text-gray-400">
+            Tier 3 = 1–{t2} · Niekwalifikowane = 0
+          </p>
+          <button
+            onClick={saveThresholds}
+            disabled={saving}
+            className="ml-auto rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          >
+            {saving ? "Zapisuję…" : "Zapisz progi"}
+          </button>
+        </div>
+        {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
+      </div>
+
+      {/* Source weights */}
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+          Wagi źródeł sygnałów (punkty za sygnał)
+        </p>
+        {sources.length === 0 ? (
+          <p className="text-xs text-gray-400">
+            Brak źródeł. Dodaj je w „Źródła sygnałów”, by zacząć punktować leady.
+          </p>
+        ) : (
+          <div className="divide-y divide-gray-100 rounded-lg border border-gray-200">
+            {sources.map((s) => (
+              <div
+                key={s.id}
+                className="flex items-center justify-between gap-3 px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-gray-800">
+                    {s.name}
+                  </p>
+                  <p className="text-[11px] text-gray-400">{s.type}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    max={1000}
+                    defaultValue={s.score_weight}
+                    onBlur={(e) => {
+                      const v = Number(e.target.value);
+                      if (v !== s.score_weight) saveWeight(s.id, v);
+                    }}
+                    className="w-20 rounded-md border border-gray-300 px-2 py-1 text-sm"
+                  />
+                  <span className="w-12 text-[11px] text-emerald-600">
+                    {savedWeight === s.id ? "zapisano" : ""}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="mt-2 text-[11px] text-gray-400">
+          Zmiana wagi działa na <em>nowo</em> wykrywane sygnały. Score już
+          przyznany nie jest przeliczany wstecz.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function CompaniesPanel() {
   const [rows, setRows] = useState<CompanyRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -515,6 +680,12 @@ export function CompaniesPanel() {
   const [sort, setSort] = useState<SortCompanies>("score");
   const [tier, setTier] = useState<TierKey>("all");
   const [query, setQuery] = useState("");
+  const [cfg, setCfg] = useState<ScoringConfig>({ tier1_min: 100, tier2_min: 20 });
+  const [showScoring, setShowScoring] = useState(false);
+
+  useEffect(() => {
+    api.scoring.get().then(setCfg).catch(() => {});
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -528,9 +699,11 @@ export function CompaniesPanel() {
     })();
   }, []);
 
+  const tierFor = (s: number) => tierOf(s, cfg.tier1_min, cfg.tier2_min);
+
   const counts = TIERS.reduce<Record<string, number>>(
     (acc, t) => {
-      acc[t.key] = rows.filter((r) => tierOf(r.total_score) === t.key).length;
+      acc[t.key] = rows.filter((r) => tierFor(r.total_score) === t.key).length;
       return acc;
     },
     { all: rows.length },
@@ -538,8 +711,16 @@ export function CompaniesPanel() {
 
   const maxScore = Math.max(100, ...rows.map((r) => r.total_score));
 
+  // Dynamic per-tier subtitle reflecting the user's thresholds.
+  const tierSub: Record<string, string> = {
+    t1: `Najgorętsze · score > ${cfg.tier1_min}`,
+    t2: `Ciepłe · ${cfg.tier2_min + 1}–${cfg.tier1_min}`,
+    t3: `Letnie · 1–${cfg.tier2_min}`,
+    nq: "Bez sygnału · 0",
+  };
+
   const filtered = rows.filter((r) => {
-    if (tier !== "all" && tierOf(r.total_score) !== tier) return false;
+    if (tier !== "all" && tierFor(r.total_score) !== tier) return false;
     const q = query.trim().toLowerCase();
     if (q && !r.company.toLowerCase().includes(q)) return false;
     return true;
@@ -592,11 +773,39 @@ export function CompaniesPanel() {
               <p className={`mt-2 text-3xl font-bold ${t.text}`}>
                 {counts[t.key] ?? 0}
               </p>
-              <p className="mt-0.5 text-[11px] text-gray-400">{t.sub}</p>
+              <p className="mt-0.5 text-[11px] text-gray-400">
+                {tierSub[t.key] ?? t.sub}
+              </p>
             </button>
           );
         })}
       </div>
+
+      {/* Scoring explainer + config toggle */}
+      <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/60 px-4 py-2.5">
+        <p className="text-xs text-gray-500">
+          Tiery liczone z <strong className="text-gray-700">sumy score
+          firmy</strong> (punkty z sygnałów dopiętych do jej osób). Progi:
+          Tier 1 &gt; {cfg.tier1_min}, Tier 2 &gt; {cfg.tier2_min}.
+        </p>
+        <button
+          onClick={() => setShowScoring((s) => !s)}
+          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          {showScoring ? "Ukryj konfigurację" : "Konfiguruj scoring"}
+        </button>
+      </div>
+
+      {showScoring && (
+        <ScoringConfigPanel
+          cfg={cfg}
+          onSaved={(c) => {
+            setCfg(c);
+            setShowScoring(false);
+          }}
+        />
+      )}
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -671,7 +880,7 @@ export function CompaniesPanel() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {sorted.map((c) => {
-                const tk = tierOf(c.total_score);
+                const tk = tierFor(c.total_score);
                 const m = TIER_META[tk];
                 const pct = Math.min(
                   100,
@@ -759,6 +968,11 @@ export function PeoplePanel() {
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState<SortPeople>("score");
   const [query, setQuery] = useState("");
+  const [cfg, setCfg] = useState<ScoringConfig>({ tier1_min: 100, tier2_min: 20 });
+
+  useEffect(() => {
+    api.scoring.get().then(setCfg).catch(() => {});
+  }, []);
 
   function describeError(err: unknown): string {
     return err instanceof ApiError
@@ -877,7 +1091,7 @@ export function PeoplePanel() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {sorted.map((p, i) => {
-                const tk = tierOf(p.score);
+                const tk = tierOf(p.score, cfg.tier1_min, cfg.tier2_min);
                 const m = TIER_META[tk];
                 const name =
                   [p.first_name, p.last_name].filter(Boolean).join(" ") ||

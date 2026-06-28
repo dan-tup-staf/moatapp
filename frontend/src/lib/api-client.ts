@@ -681,6 +681,11 @@ export type RunAllResult = {
   results: SourceRunItem[];
 };
 
+export type ScoringConfig = {
+  tier1_min: number;
+  tier2_min: number;
+};
+
 export type SignalSourcePreset = {
   key: string;
   category: string;
@@ -1455,6 +1460,16 @@ export const api = {
       authed<RunAllResult>(`/signal-sources/run-all`, { method: "POST" }),
     searchProvider: () =>
       authed<string>(`/signal-sources/search-provider`),
+  },
+
+  // Scoring config (tier thresholds)
+  scoring: {
+    get: () => authed<ScoringConfig>("/scoring"),
+    update: (data: ScoringConfig) =>
+      authed<ScoringConfig>("/scoring", {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
   },
 
   // Watchlists (companies / people to track)
