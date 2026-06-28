@@ -37,6 +37,9 @@ Legenda: 🔴 blokuje realne działanie · 🟡 opcjonalne / poprawia jakość �
      podobnie). Bez tego kampanie nie wyjdą realnie z Twojego adresu.
    - Podaj też **host IMAP** (np. `imap.gmail.com`) — do wykrywania odpowiedzi
      i działania zakładki Skrzynka.
+   - ⚠️ **Wysyłka testowa w kroku sekwencji** też wymaga podłączonej skrzynki
+     wybranej jako adres nadawcy kampanii. Bez niej zobaczysz teraz jasny
+     komunikat zamiast błędu „mailhog” (naprawione).
 7. **Profil LinkedIn** → zakładka LinkedIn → „Podłącz profil":
    - cookie **`li_at`** + **`JSESSIONID`** z przeglądarki (instrukcja w UI),
      opcjonalnie proxy. Bez tego kroki LinkedIn w sekwencjach nie wyślą się auto.
@@ -60,6 +63,14 @@ Legenda: 🔴 blokuje realne działanie · 🟡 opcjonalne / poprawia jakość �
 
 ## ℹ️ Działa bez Twojej pracy (dla kontekstu)
 Sygnały (DuckDuckGo + Google News RSS), tiering, listy/CSV, sekwencje
-(warunkowe, A/B, szablony), tracking, unsubscribe (gdy `TRACKING_BASE_URL`),
-bounce handling, reply detection (gdy IMAP), unified inbox, wyniki + CSV,
-rotacja skrzynek, warmup, scheduler (gdy nie śpi / cron).
+(warunkowe, A/B, szablony — w tym „zapisz jako szablon”), tracking,
+unsubscribe (gdy `TRACKING_BASE_URL`), bounce handling, reply detection
+(gdy IMAP), unified inbox, wyniki + CSV, rotacja skrzynek, warmup, scheduler
+(gdy nie śpi / cron).
+
+**Nowe — Listy obserwowane** (zakładka „Listy obserwowane” w Strategii):
+twórz listy firm/osób z CSV (szablon + import), wyszukiwarki prospektów
+(filtry jak Lusha/Prospeo — działa na darmowym DuckDuckGo, lepsza z
+Brave/SerpAPI), linku LinkedIn Search lub ręcznie; edytuj/zaznaczaj/usuwaj
+pozycje; potem podepnij listę do źródła sygnałów (pole „Lista obserwowana”),
+by śledzić sygnały osobno dla każdej firmy/osoby.
