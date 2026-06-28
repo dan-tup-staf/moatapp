@@ -94,9 +94,9 @@ export function SubsequenceTab({
               Subsequence — rozgałęzienia warunkowe
             </h3>
             <p className="mt-0.5 max-w-xl text-xs text-gray-500">
-              Reguły „jeśli → to" wykonywane po danym kroku. Definicje są
-              zapisywane i widoczne 1:1; automatyczne wykonywanie w workerze —
-              wkrótce (dziś wysyłka jest liniowa).
+              Reguły „jeśli → to" wykonywane automatycznie po danym kroku —
+              przed wysłaniem kolejnego sprawdzamy zaangażowanie (otwarcie/
+              kliknięcie) i stosujemy akcję: zatrzymaj, oznacz wynik lub dodaj tag.
             </p>
           </div>
         </div>

@@ -27,7 +27,12 @@ from app.models.campaign_enrollment import CampaignEnrollment
 from app.models.lead import Lead
 from app.models.message import Message
 from app.models.sequence_step import SequenceStep
-from app.services.campaigns import pick_step_variant, render_template
+from app.services.campaigns import (
+    join_tags,
+    pick_step_variant,
+    render_template,
+    split_tags,
+)
 from app.services.icp import get_or_none as _get_icp
 from app.services.icp import merge_tags as _icp_merge_tags
 from app.services.tracking import (
@@ -532,6 +537,82 @@ async def send_account_test(account) -> None:
     )
 
 
+async def _evaluate_branches(db, enr, campaign, steps) -> bool:
+    """Evaluate conditional branches ("Subsequence") for the step the prospect
+    just finished. Returns True when the sequence should STOP for this prospect
+    (a matching 'stop' branch). Side effects: mark_outcome / add_tag.
+
+    Engagement is read from the previous step's message, evaluated on the next
+    tick (so opens/clicks have had time to land)."""
+    from app.models.sequence_branch import SequenceBranch
+
+    if enr.current_step <= 0:
+        return False
+    prev_order = enr.current_step - 1
+    branches = (
+        await db.execute(
+            select(SequenceBranch).where(
+                SequenceBranch.campaign_id == campaign.id,
+                SequenceBranch.after_step_order == prev_order,
+            )
+        )
+    ).scalars().all()
+    if not branches:
+        return False
+
+    prev_step = steps[prev_order] if prev_order < len(steps) else None
+    opened = clicked = False
+    if prev_step is not None:
+        rows = (
+            await db.execute(
+                select(Message.opened_at, Message.clicked_at).where(
+                    Message.enrollment_id == enr.id,
+                    Message.step_id == prev_step.id,
+                )
+            )
+        ).all()
+        for o, c in rows:
+            opened = opened or o is not None
+            clicked = clicked or c is not None
+    replied = enr.status == "replied"
+
+    def _match(cond: str) -> bool:
+        return (
+            (cond == "opened" and opened)
+            or (cond == "not_opened" and not opened)
+            or (cond == "clicked" and clicked)
+            or (cond == "not_clicked" and not clicked)
+            or (cond == "replied" and replied)
+            or (cond == "not_replied" and not replied)
+        )
+
+    stop = False
+    changed = False
+    for b in branches:
+        if not _match(b.condition):
+            continue
+        if b.action == "stop":
+            stop = True
+        elif b.action == "mark_outcome" and b.outcome:
+            if enr.outcome != b.outcome:
+                enr.outcome = b.outcome
+                changed = True
+        elif b.action == "add_tag" and b.tag:
+            tags = split_tags(enr.tags)
+            if b.tag not in tags:
+                tags.append(b.tag)
+                enr.tags = join_tags(tags)
+                changed = True
+    if stop:
+        enr.status = "completed"
+        enr.next_send_at = None
+        await db.commit()
+        return True
+    if changed:
+        await db.commit()
+    return False
+
+
 async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
     """Process a single enrollment by id. Returns Message or None if skipped."""
     enr = (
@@ -578,6 +659,11 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
         enr.status = "completed"
         enr.next_send_at = None
         await db.commit()
+        return None
+
+    # Conditional branches: react to engagement on the previous step before
+    # sending the next one (stop / mark outcome / tag).
+    if await _evaluate_branches(db, enr, campaign, steps):
         return None
 
     step = steps[enr.current_step]
