@@ -31,6 +31,7 @@ from app.schemas.campaigns import (
     SequenceScore,
     StepCreate,
     StepRead,
+    VariantStats,
     StepTestSendRequest,
     StepTestSendResult,
     StepUpdate,
@@ -198,6 +199,30 @@ async def update_step(
         raise HTTPException(status_code=404, detail="Step not found")
     obj = await svc.update_step(db, obj, payload)
     return StepRead.model_validate(obj)
+
+
+@router.get(
+    "/{campaign_id}/steps/{step_id}/variant-stats",
+    response_model=VariantStats,
+)
+async def step_variant_stats(
+    campaign_id: int,
+    step_id: int,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> VariantStats:
+    await _ensure_owned_campaign(db, current, campaign_id)
+    step = await svc.get_step(db, campaign_id, step_id)
+    if step is None:
+        raise HTTPException(status_code=404, detail="Step not found")
+    perf = await svc.variant_performance(db, step)
+    win = svc._ab_winner(perf)
+    return VariantStats(
+        ab_auto=step.ab_auto,
+        min_sample=svc.AB_MIN_SAMPLE,
+        winner_variant_id=(win["variant_id"] if win else None),
+        variants=perf,
+    )
 
 
 @router.delete(

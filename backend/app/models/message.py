@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -35,6 +35,9 @@ class Message(Base):
     # RFC 5322 Message-ID stamped on the outgoing email — used to thread
     # follow-ups (In-Reply-To / References) when same_thread is on.
     message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # A/B variant this message used (NULL = the base step variant "A").
+    variant_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     sent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

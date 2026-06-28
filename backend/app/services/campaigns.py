@@ -1183,6 +1183,97 @@ def pick_variant(options: list[tuple[str, str]], seed: str) -> tuple[str, str]:
     return options[int(digest, 16) % len(options)]
 
 
+# Minimum sends per variant before A/B auto-winner can fire.
+AB_MIN_SAMPLE = 8
+
+
+async def variant_performance(db: AsyncSession, step: SequenceStep) -> list[dict]:
+    """Per-variant send/open/click stats for a step (variant_id None = base).
+    Used by the A/B panel and the auto-winner."""
+    from sqlalchemy import case
+
+    variants = await list_variants(db, step.id)
+    rows = (
+        await db.execute(
+            select(
+                Message.variant_id,
+                func.coalesce(
+                    func.sum(case((Message.status == "sent", 1), else_=0)), 0
+                ),
+                func.coalesce(
+                    func.sum(
+                        case((Message.opened_at.isnot(None), 1), else_=0)
+                    ),
+                    0,
+                ),
+                func.coalesce(
+                    func.sum(
+                        case((Message.clicked_at.isnot(None), 1), else_=0)
+                    ),
+                    0,
+                ),
+            )
+            .where(Message.step_id == step.id)
+            .group_by(Message.variant_id)
+        )
+    ).all()
+    by_vid = {r[0]: (int(r[1]), int(r[2]), int(r[3])) for r in rows}
+
+    items: list[dict] = []
+    defs = [(None, "A", step.subject)] + [
+        (v.id, chr(ord("B") + i), v.subject) for i, v in enumerate(variants)
+    ]
+    for vid, label, subject in defs:
+        sent, opened, clicked = by_vid.get(vid, (0, 0, 0))
+        items.append(
+            {
+                "variant_id": vid,
+                "label": label,
+                "subject": subject,
+                "sent": sent,
+                "opened": opened,
+                "clicked": clicked,
+                "open_rate": round(100 * opened / sent, 1) if sent else 0.0,
+                "click_rate": round(100 * clicked / sent, 1) if sent else 0.0,
+            }
+        )
+    return items
+
+
+def _ab_winner(perf: list[dict]) -> dict | None:
+    """The winning variant once every variant has the minimum sample, else
+    None (keep rotating to gather data)."""
+    if len(perf) < 2:
+        return None
+    if any(p["sent"] < AB_MIN_SAMPLE for p in perf):
+        return None
+    # Best by open rate, tie-break by raw opens then sent.
+    return max(perf, key=lambda p: (p["open_rate"], p["opened"], p["sent"]))
+
+
+async def pick_step_variant(
+    db: AsyncSession, step: SequenceStep, seed: str
+) -> tuple[int | None, str, str]:
+    """Choose the variant for a recipient: the auto-winner when ab_auto is on
+    and enough data exists, otherwise a deterministic rotation. Returns
+    (variant_id_or_None, subject, body)."""
+    variants = await list_variants(db, step.id)
+    options: list[tuple[int | None, str, str]] = [
+        (None, step.subject, step.body_template)
+    ] + [(v.id, v.subject, v.body_template) for v in variants]
+
+    if getattr(step, "ab_auto", False) and len(options) > 1:
+        perf = await variant_performance(db, step)
+        win = _ab_winner(perf)
+        if win is not None:
+            for vid, subj, body in options:
+                if vid == win["variant_id"]:
+                    return vid, subj, body
+
+    digest = hashlib.md5(seed.encode("utf-8")).hexdigest()
+    return options[int(digest, 16) % len(options)]
+
+
 async def generate_ai_variant(step: SequenceStep) -> dict:
     """Ask the AI to rewrite this step into an alternative variant (different
     angle/wording, same intent). Returns {subject, body_template}."""

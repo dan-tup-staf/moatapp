@@ -54,6 +54,7 @@ class StepUpdate(BaseModel):
     body_template: str | None = Field(default=None, min_length=1)
     delay_days: int | None = Field(default=None, ge=0, le=365)
     channel: StepChannel | None = None
+    ab_auto: bool | None = None
 
 
 class StepRead(BaseModel):
@@ -66,6 +67,25 @@ class StepRead(BaseModel):
     body_template: str
     delay_days: int
     channel: StepChannel
+    ab_auto: bool = False
+
+
+class VariantPerf(BaseModel):
+    variant_id: int | None
+    label: str
+    subject: str
+    sent: int
+    opened: int
+    clicked: int
+    open_rate: float
+    click_rate: float
+
+
+class VariantStats(BaseModel):
+    ab_auto: bool
+    min_sample: int
+    winner_variant_id: int | None = None
+    variants: list[VariantPerf]
 
 
 class VariantCreate(BaseModel):

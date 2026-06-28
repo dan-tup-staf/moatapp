@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -24,4 +24,9 @@ class SequenceStep(Base):
     # enrollment without sending anything. User handles LinkedIn manually.
     channel: Mapped[str] = mapped_column(
         String(32), nullable=False, default="email"
+    )
+    # A/B: when set, once each variant has enough sends the best-performing one
+    # (by open rate) is auto-selected and sent to everyone.
+    ab_auto: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
     )

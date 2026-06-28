@@ -316,6 +316,7 @@ export type SequenceStep = {
   body_template: string;
   delay_days: number;
   channel: StepChannel;
+  ab_auto: boolean;
 };
 
 export type StepCreate = {
@@ -326,7 +327,7 @@ export type StepCreate = {
   channel?: StepChannel;
 };
 
-export type StepUpdate = Partial<StepCreate>;
+export type StepUpdate = Partial<StepCreate> & { ab_auto?: boolean };
 
 export type StepVariant = {
   id: number;
@@ -334,6 +335,24 @@ export type StepVariant = {
   subject: string;
   body_template: string;
   created_at: string;
+};
+
+export type VariantPerf = {
+  variant_id: number | null;
+  label: string;
+  subject: string;
+  sent: number;
+  opened: number;
+  clicked: number;
+  open_rate: number;
+  click_rate: number;
+};
+
+export type VariantStats = {
+  ab_auto: boolean;
+  min_sample: number;
+  winner_variant_id: number | null;
+  variants: VariantPerf[];
 };
 
 export type EnrollmentStatus =
@@ -1079,6 +1098,10 @@ export const api = {
     listVariants: (campaignId: number, stepId: number) =>
       authed<StepVariant[]>(
         `/campaigns/${campaignId}/steps/${stepId}/variants`,
+      ),
+    variantStats: (campaignId: number, stepId: number) =>
+      authed<VariantStats>(
+        `/campaigns/${campaignId}/steps/${stepId}/variant-stats`,
       ),
     createVariant: (
       campaignId: number,

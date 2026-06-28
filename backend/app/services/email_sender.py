@@ -27,7 +27,7 @@ from app.models.campaign_enrollment import CampaignEnrollment
 from app.models.lead import Lead
 from app.models.message import Message
 from app.models.sequence_step import SequenceStep
-from app.services.campaigns import list_variants, pick_variant, render_template
+from app.services.campaigns import pick_step_variant, render_template
 from app.services.icp import get_or_none as _get_icp
 from app.services.icp import merge_tags as _icp_merge_tags
 from app.services.tracking import (
@@ -600,13 +600,10 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
             await db.commit()
             return None
 
-        # A/B variants: the step itself is variant "A"; pick one per recipient.
-        variants = await list_variants(db, step.id)
-        options = [(step.subject, step.body_template)] + [
-            (v.subject, v.body_template) for v in variants
-        ]
-        chosen_subject, chosen_body = pick_variant(
-            options, f"{lead.email}|{step.id}"
+        # A/B variants: rotate per recipient, or send the auto-winner when the
+        # step's A/B test has gathered enough data.
+        chosen_variant_id, chosen_subject, chosen_body = await pick_step_variant(
+            db, step, f"{lead.email}|{step.id}"
         )
         icp = await _get_icp(db, campaign.user_id)
         extra = _icp_merge_tags(icp.icp_fields if icp else None)
@@ -684,6 +681,7 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
             to_email=lead.email,
             from_email=send_from,
             message_id=out_message_id,
+            variant_id=chosen_variant_id,
             status="sent",
         )
         db.add(msg)

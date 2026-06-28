@@ -25,6 +25,7 @@ import {
   StepChannel,
   StepStats,
   StepVariant,
+  VariantStats,
 } from "@/lib/api-client";
 
 const CHANNELS: {
@@ -788,6 +789,7 @@ function VariantsArea({
   stepId: number;
 }) {
   const [variants, setVariants] = useState<StepVariant[]>([]);
+  const [stats, setStats] = useState<VariantStats | null>(null);
   const [gen, setGen] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [vs, setVs] = useState("");
@@ -795,7 +797,12 @@ function VariantsArea({
 
   async function refresh() {
     try {
-      setVariants(await api.campaigns.listVariants(campaignId, stepId));
+      const [v, s] = await Promise.all([
+        api.campaigns.listVariants(campaignId, stepId),
+        api.campaigns.variantStats(campaignId, stepId).catch(() => null),
+      ]);
+      setVariants(v);
+      setStats(s);
     } catch {
       // ignore
     }
@@ -804,6 +811,18 @@ function VariantsArea({
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stepId]);
+
+  async function toggleAuto() {
+    if (!stats) return;
+    try {
+      await api.campaigns.updateStep(campaignId, stepId, {
+        ab_auto: !stats.ab_auto,
+      });
+      await refresh();
+    } catch (e) {
+      alert(e instanceof ApiError ? e.detail : "Błąd");
+    }
+  }
 
   async function genAi() {
     setGen(true);
@@ -860,6 +879,65 @@ function VariantsArea({
           </button>
         </div>
       </div>
+
+      {/* Auto-winner toggle + performance */}
+      {stats && stats.variants.length > 1 && (
+        <div className="mt-2 rounded-md border border-violet-100 bg-white p-2">
+          <label className="flex cursor-pointer items-center justify-between gap-2">
+            <span className="text-[11px] text-gray-700">
+              Auto-wybór zwycięzcy{" "}
+              <span className="text-gray-400">
+                (po {stats.min_sample} wysyłkach/wariant wybiera najlepszy open
+                rate)
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={toggleAuto}
+              className={
+                "relative h-4 w-7 shrink-0 rounded-full transition " +
+                (stats.ab_auto ? "bg-violet-600" : "bg-gray-300")
+              }
+            >
+              <span
+                className={
+                  "absolute top-0.5 h-3 w-3 rounded-full bg-white transition " +
+                  (stats.ab_auto ? "left-3.5" : "left-0.5")
+                }
+              />
+            </button>
+          </label>
+          <div className="mt-2 space-y-1">
+            {stats.variants.map((v) => {
+              const win = stats.winner_variant_id === v.variant_id;
+              return (
+                <div
+                  key={v.label}
+                  className="flex items-center gap-2 text-[11px]"
+                >
+                  <span className="w-4 font-semibold text-gray-700">
+                    {v.label}
+                  </span>
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+                    <div
+                      className={win ? "h-full bg-emerald-500" : "h-full bg-violet-400"}
+                      style={{ width: `${Math.min(100, v.open_rate)}%` }}
+                    />
+                  </div>
+                  <span className="w-24 text-right text-gray-500">
+                    {v.open_rate}% open · {v.sent} wys.
+                  </span>
+                  {win && (
+                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                      Zwycięzca
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {showForm && (
         <form onSubmit={add} className="mt-2 space-y-2">
           <input
