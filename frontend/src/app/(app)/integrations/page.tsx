@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { api, ApiError, EmailStatus, Webhook } from "@/lib/api-client";
+import { CrmProvidersSection } from "@/components/crm-providers";
 
 type Integration = {
   id: string;
@@ -156,6 +157,8 @@ export default function IntegrationsPage() {
         </p>
       </div>
 
+      <CrmProvidersSection />
+
       <MailboxCard />
 
       <WebhooksCard />
@@ -163,13 +166,11 @@ export default function IntegrationsPage() {
       <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
         <Construction className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
         <div>
-          <p className="font-medium">Roadmap — jeszcze niezaimplementowane</p>
+          <p className="font-medium">Roadmap — pozostałe integracje</p>
           <p className="mt-1 text-xs text-amber-800">
-            Wszystkie integracje poniżej to placeholders. Architektura jest
-            gotowa (hook points w signal service, campaign sender, pipeline
-            service), ale faktyczne wywołania cudzych API wymagają kluczy
-            klienta i OAuth flow — będziemy dodawać per klient gdy pojawi się
-            potrzeba.
+            Poniższe pozycje to placeholders. Architektura jest gotowa (hook
+            points w signal service, campaign sender, pipeline service), ale
+            faktyczne wywołania cudzych API wymagają kluczy klienta i OAuth flow.
           </p>
         </div>
       </div>

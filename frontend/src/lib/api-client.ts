@@ -311,6 +311,11 @@ export type Campaign = {
   deal_value: number | null;
   esp_matching: boolean;
   sender_account_ids: number[];
+  goal_type: string;
+  goal_crm_action: string;
+  goal_crm_provider: string | null;
+  goal_task_note: string | null;
+  goal_deal_value: number | null;
   created_at: string;
   updated_at: string;
   steps_count: number;
@@ -344,6 +349,25 @@ export type CampaignUpdate = Partial<CampaignCreate> & {
   sending_priority?: string;
   deal_value?: number | null;
   sender_account_ids?: number[];
+  goal_type?: string;
+  goal_crm_action?: string;
+  goal_crm_provider?: string | null;
+  goal_task_note?: string | null;
+  goal_deal_value?: number | null;
+};
+
+export type CrmProvider = {
+  key: string;
+  name: string;
+  description: string;
+  docs_url: string;
+  key_hint: string;
+  needs_domain: boolean;
+  actions: string[];
+  connected: boolean;
+  enabled: boolean;
+  key_masked: string | null;
+  domain: string | null;
 };
 
 export type StepChannel =
@@ -1399,6 +1423,12 @@ export const api = {
         { method: "POST" },
       ),
 
+    reachGoal: (campaignId: number, enrollmentId: number) =>
+      authed<{ skipped: boolean; action?: string; via?: string }>(
+        `/campaigns/${campaignId}/enrollments/${enrollmentId}/reach-goal`,
+        { method: "POST" },
+      ),
+
     stats: (campaignId: number) =>
       authed<CampaignStats>(`/campaigns/${campaignId}/stats`),
 
@@ -1495,6 +1525,18 @@ export const api = {
         `/enrichment/${provider}/test`,
         { method: "POST" },
       ),
+  },
+
+  // CRM integrations (Livespace / HubSpot / Pipedrive / Salesforce)
+  crmIntegrations: {
+    providers: () => authed<CrmProvider[]>("/crm-integrations/providers"),
+    connect: (provider: string, apiKey: string, domain?: string) =>
+      authed<CrmProvider>(`/crm-integrations/${provider}/connect`, {
+        method: "POST",
+        body: JSON.stringify({ api_key: apiKey, domain: domain ?? null }),
+      }),
+    disconnect: (provider: string) =>
+      authed<void>(`/crm-integrations/${provider}`, { method: "DELETE" }),
   },
 
   // Scoring config (tier thresholds)

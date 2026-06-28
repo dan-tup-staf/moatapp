@@ -1,5 +1,6 @@
 from app.models.campaign import Campaign
 from app.models.campaign_enrollment import CampaignEnrollment
+from app.models.crm_integration import CrmIntegration
 from app.models.email_account import EmailAccount
 from app.models.enrichment_integration import EnrichmentIntegration
 from app.models.icp_profile import IcpProfile
@@ -39,4 +40,5 @@ __all__ = [
     "WatchlistEntity",
     "ScoringConfig",
     "EnrichmentIntegration",
+    "CrmIntegration",
 ]

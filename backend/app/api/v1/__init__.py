@@ -4,6 +4,7 @@ from app.api.v1 import (
     account,
     auth,
     campaign_groups,
+    crm_integrations,
     enrichment,
     campaigns,
     crm,
@@ -37,6 +38,7 @@ api_router.include_router(campaign_groups.router)
 api_router.include_router(signal_sources.router)
 api_router.include_router(scoring.router)
 api_router.include_router(enrichment.router)
+api_router.include_router(crm_integrations.router)
 api_router.include_router(watchlists.router)
 api_router.include_router(signals.router)
 api_router.include_router(dashboard.router)

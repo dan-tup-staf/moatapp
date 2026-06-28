@@ -91,6 +91,26 @@ class Campaign(Base):
     )
     # Estimated deal value per prospect (used for pipeline revenue rollups).
     deal_value: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # ----- Sequence goal ("Cel sekwencji") -----
+    # What counts as conversion (trigger): none | meeting_calendly |
+    # meeting_confirmed | demo_form | positive_reply | manual
+    goal_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="none"
+    )
+    # What to create in the CRM on goal: none | contact | task | deal
+    goal_crm_action: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="none"
+    )
+    # Which connected CRM (livespace|hubspot|pipedrive|salesforce) or empty.
+    goal_crm_provider: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    # Note/title for the sales task action.
+    goal_task_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Deal value (PLN) for the deal action; falls back to deal_value.
+    goal_deal_value: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

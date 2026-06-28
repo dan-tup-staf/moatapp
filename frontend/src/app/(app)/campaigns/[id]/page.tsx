@@ -42,6 +42,7 @@ import {
 import { StepsTab } from "@/components/sequence-steps";
 import { ProspectsTab } from "@/components/prospects";
 import { SubsequenceTab } from "@/components/subsequence";
+import { SequenceGoalCard } from "@/components/sequence-goal";
 
 const CHANNEL_LABELS: Record<StepChannel, string> = {
   email: "Email",
@@ -531,13 +532,16 @@ export default function CampaignDetailPage() {
 
       {/* TAB: Kroki */}
       {tab === "kroki" && (
-        <StepsTab
-          campaignId={campaignId}
-          campaign={campaign}
-          steps={steps}
-          statsByStepId={statsByStepId}
-          refresh={refresh}
-        />
+        <div className="space-y-4">
+          <StepsTab
+            campaignId={campaignId}
+            campaign={campaign}
+            steps={steps}
+            statsByStepId={statsByStepId}
+            refresh={refresh}
+          />
+          <SequenceGoalCard campaign={campaign} onSaved={refresh} />
+        </div>
       )}
 
       {/* TAB: Subsequence */}

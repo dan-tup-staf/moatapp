@@ -89,6 +89,11 @@ def _to_campaign_read(c, steps_count: int, enrollments_count: int) -> CampaignRe
         sending_priority=c.sending_priority,
         deal_value=c.deal_value,
         sender_account_ids=_parse_ids(getattr(c, "sender_account_ids", "")),
+        goal_type=getattr(c, "goal_type", "none"),
+        goal_crm_action=getattr(c, "goal_crm_action", "none"),
+        goal_crm_provider=getattr(c, "goal_crm_provider", None),
+        goal_task_note=getattr(c, "goal_task_note", None),
+        goal_deal_value=getattr(c, "goal_deal_value", None),
         created_at=c.created_at,
         updated_at=c.updated_at,
         steps_count=steps_count,
@@ -604,6 +609,7 @@ async def update_enrollment(
     enr = await svc.get_enrollment(db, campaign_id, enrollment_id)
     if enr is None:
         raise HTTPException(status_code=404, detail="Enrollment not found")
+    campaign = await svc.get_campaign(db, current.id, campaign_id)
     enr = await svc.update_enrollment(db, enr, payload)
     # Push outcome changes to the user's webhooks (CRM).
     if payload.outcome is not None:
@@ -622,9 +628,55 @@ async def update_enrollment(
                     "lead": lead_payload(lead),
                 },
             )
+            # Auto-fire the sequence goal when the prospect converts
+            # (meeting booked / closed won) and a goal action is configured.
+            from app.services.sequence_goal import (
+                GOAL_TRIGGER_OUTCOMES,
+                execute_goal,
+            )
+
+            if (
+                campaign is not None
+                and enr.outcome in GOAL_TRIGGER_OUTCOMES
+                and (getattr(campaign, "goal_crm_action", "none") or "none")
+                != "none"
+            ):
+                try:
+                    await execute_goal(
+                        db, current.id, campaign, enr, lead, mark_outcome=False
+                    )
+                except Exception:  # noqa: BLE001 — don't fail the edit
+                    pass
     item = EnrollmentRead.model_validate(enr)
     item.tags = svc.split_tags(enr.tags)
     return item
+
+
+@router.post("/{campaign_id}/enrollments/{enrollment_id}/reach-goal")
+async def reach_goal(
+    campaign_id: int,
+    enrollment_id: int,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Manually mark the sequence goal as reached for this prospect — pushes the
+    lead to the configured CRM (contact/task/deal) and marks them converted."""
+    from app.models.lead import Lead
+    from app.services.sequence_goal import execute_goal
+
+    campaign = await _ensure_owned_campaign(db, current, campaign_id)
+    enr = await svc.get_enrollment(db, campaign_id, enrollment_id)
+    if enr is None:
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    if (getattr(campaign, "goal_crm_action", "none") or "none") == "none":
+        raise HTTPException(
+            status_code=400,
+            detail="Najpierw ustaw Cel sekwencji (akcję CRM) w tej sekwencji.",
+        )
+    lead = await db.get(Lead, enr.lead_id)
+    if lead is None:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return await execute_goal(db, current.id, campaign, enr, lead)
 
 
 @router.post(

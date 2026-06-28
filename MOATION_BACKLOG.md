@@ -56,7 +56,25 @@ Do zrobienia progresywnie (duże, mechaniczne):
 - [ ] Przetłumaczyć treść ekranów na EN (rozszerzać słownik + owijać stringi `t()`).
 > Status: powłoka działa, treść ekranów dochodzi etapami.
 
-## „Cel sekwencji” — domknięcie lejka do CRM — 🔜 (zaprojektowane z userem)
+## „Cel sekwencji” + CRM (Livespace/HubSpot/Pipedrive/Salesforce) — 🏗️ ZBUDOWANE (scaffold)
+✅ Zrobione:
+- Integracje CRM: model `CrmIntegration` (klucz szyfr.) + migracja 0033 + API
+  `/crm-integrations` + sekcja na stronie Integracje (4 dostawcy: Livespace,
+  HubSpot, Pipedrive, Salesforce; connect klucz+domena).
+- Cel sekwencji: pola na `Campaign` (goal_type, goal_crm_action,
+  goal_crm_provider, goal_task_note, goal_deal_value) + kafel „Cel sekwencji”
+  na końcu kroków w detalu sekwencji (trigger + akcja CRM contact/task/deal).
+- Wykonanie: `services/sequence_goal.execute_goal` → `crm_integrations.push`
+  (na razie przez generyczny webhook event `crm_<action>`). Auto-trigger gdy
+  outcome = meeting_booked/closed_won; + ręczny endpoint
+  `POST /campaigns/{id}/enrollments/{eid}/reach-goal`.
+
+🔜 Do dokończenia (gdy będą klucze API CRM):
+- [ ] Realne wywołania API per-dostawca w `crm_integrations.push` (dziś webhook).
+- [ ] Triggery zewnętrzne: Calendly webhook, Google Meet/Calendar, formularz Demo.
+- [ ] Przycisk „Cel osiągnięty” w tabeli prospektów (dziś: zmiana outcome auto-pala).
+
+## (poprzednia notatka projektowa) „Cel sekwencji” — domknięcie lejka do CRM
 Spinamy sekwencję klamrą: **ostatni etap każdej sekwencji = „Cel sekwencji”**
 (konwersja). Gdy cel zostanie osiągnięty, lead trafia do CRM jako jedno z (user
 wybiera): **Kontakt**, **Zadanie dla handlowca**, albo **Szansa sprzedaży (deal)**.

@@ -159,6 +159,12 @@ class CampaignUpdate(BaseModel):
     sending_priority: str | None = Field(default=None, max_length=32)
     deal_value: int | None = Field(default=None, ge=0)
     sender_account_ids: list[int] | None = None
+    # Sequence goal
+    goal_type: str | None = Field(default=None, max_length=32)
+    goal_crm_action: str | None = Field(default=None, max_length=16)
+    goal_crm_provider: str | None = Field(default=None, max_length=32)
+    goal_task_note: str | None = None
+    goal_deal_value: int | None = Field(default=None, ge=0)
 
 
 class CampaignRead(BaseModel):
@@ -187,6 +193,11 @@ class CampaignRead(BaseModel):
     sending_priority: str = "balanced"
     deal_value: int | None = None
     sender_account_ids: list[int] = Field(default_factory=list)
+    goal_type: str = "none"
+    goal_crm_action: str = "none"
+    goal_crm_provider: str | None = None
+    goal_task_note: str | None = None
+    goal_deal_value: int | None = None
     created_at: datetime
     updated_at: datetime
     steps_count: int = 0
