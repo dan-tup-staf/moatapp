@@ -40,6 +40,16 @@ Zakres do zbudowania:
 - [ ] Egzekwowanie limitów planu w backendzie (np. limit leadów/wysyłek).
 > Klucze Stripe: patrz `TODO_USER.md`. Bez nich billing = tryb podglądu.
 
+## Tryb nocny + język EN — 🏗️ infrastruktura gotowa, rollout per-ekran
+Zrobione: przełączniki w górnym pasku (PL/EN + jasny/nocny), zapis w
+localStorage, `PreferencesProvider`, `darkMode:"class"`, `useT()` + słownik
+(`src/lib/i18n.ts`). Powłoka (sidebar, topbar, nav) i landing mają `dark:` + EN nav.
+Do zrobienia progresywnie (duże, mechaniczne):
+- [ ] Dodać `dark:` warianty na WSZYSTKICH ekranach (karty bg-white→dark, teksty,
+      bordery) — sekcja po sekcji.
+- [ ] Przetłumaczyć treść ekranów na EN (rozszerzać słownik + owijać stringi `t()`).
+> Status: powłoka działa, treść ekranów dochodzi etapami.
+
 ## Panel użytkownika (realny, nie placeholder) — 🔜
 - [ ] **Profil**: zmiana imienia, e-maila, hasła; avatar (opcjonalnie).
 - [ ] **Konto/plan**: aktualny plan, zużycie vs limity, upgrade/downgrade.

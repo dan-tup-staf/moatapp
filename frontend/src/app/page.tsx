@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "@/contexts/auth-context";
+import { PreferencesControls } from "@/components/preferences-controls";
 
 const FEATURES = [
   {
@@ -121,6 +122,7 @@ export default function Home() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <span className="text-xl font-bold tracking-tight">MOATION</span>
           <nav className="flex items-center gap-2">
+            <PreferencesControls />
             <Link
               href="/login"
               className="rounded-md px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900"

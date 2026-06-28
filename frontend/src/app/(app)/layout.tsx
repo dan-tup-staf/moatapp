@@ -31,6 +31,8 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "@/contexts/auth-context";
+import { PreferencesControls } from "@/components/preferences-controls";
+import { useT } from "@/lib/i18n";
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
 type NavGroup = { title?: string; items: NavItem[] };
@@ -100,6 +102,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, loading, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  const t = useT();
 
   useEffect(() => {
     if (!loading && !user) {
@@ -109,7 +112,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (loading || !user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-950">
         <p className="text-sm text-gray-500">Ładowanie...</p>
       </div>
     );
@@ -121,39 +124,41 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return (
       <Link
         href={item.href}
-        title={collapsed ? item.label : undefined}
+        title={collapsed ? t(item.label) : undefined}
         className={
           "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors " +
           (collapsed ? "justify-center " : "") +
           (active
-            ? "bg-gray-100 text-gray-900"
-            : "text-gray-500 hover:bg-gray-50 hover:text-gray-900")
+            ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100"
+            : "text-gray-500 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100")
         }
       >
         <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={active ? 2.4 : 2} />
-        {!collapsed && <span className="truncate">{item.label}</span>}
+        {!collapsed && <span className="truncate">{t(item.label)}</span>}
       </Link>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-950">
       <aside
         className={
-          "sticky top-0 flex h-screen shrink-0 flex-col border-r border-gray-200 bg-white transition-[width] duration-200 " +
+          "sticky top-0 flex h-screen shrink-0 flex-col border-r border-gray-200 bg-white transition-[width] duration-200 dark:border-gray-800 dark:bg-gray-900 " +
           (collapsed ? "w-16" : "w-60")
         }
       >
         {/* Brand + collapse */}
-        <div className="flex h-14 items-center justify-between border-b border-gray-200 px-3">
+        <div className="flex h-14 items-center justify-between border-b border-gray-200 px-3 dark:border-gray-800">
           {!collapsed && (
-            <span className="text-lg font-bold tracking-tight">MOATION</span>
+            <span className="text-lg font-bold tracking-tight dark:text-gray-100">
+              MOATION
+            </span>
           )}
           <button
             onClick={() => setCollapsed((c) => !c)}
             title={collapsed ? "Rozwiń panel" : "Zwiń panel"}
             className={
-              "rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 " +
+              "rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200 " +
               (collapsed ? "mx-auto" : "")
             }
           >
@@ -170,8 +175,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {NAV_GROUPS.map((group, gi) => (
             <div key={gi} className="space-y-1">
               {group.title && !collapsed && (
-                <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-                  {group.title}
+                <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                  {t(group.title)}
                 </p>
               )}
               {group.items.map((item) => (
@@ -182,10 +187,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </nav>
 
         {/* Bottom: account group + integrations + logout */}
-        <div className="space-y-1 border-t border-gray-200 px-2 py-3">
+        <div className="space-y-1 border-t border-gray-200 px-2 py-3 dark:border-gray-800">
           {ACCOUNT_GROUP.title && !collapsed && (
-            <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-              {ACCOUNT_GROUP.title}
+            <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+              {t(ACCOUNT_GROUP.title)}
             </p>
           )}
           {ACCOUNT_GROUP.items.map((item) => (
@@ -207,8 +212,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             )}
             <button
               onClick={logout}
-              title="Wyloguj"
-              className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+              title={t("Wyloguj")}
+              className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
             >
               <LogOut className="h-4 w-4" />
             </button>
@@ -216,8 +221,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1">
-        <div className="mx-auto max-w-6xl p-6">{children}</div>
+      <main className="flex min-w-0 flex-1 flex-col">
+        {/* Top bar: language + dark-mode */}
+        <div className="sticky top-0 z-20 flex h-14 items-center justify-end gap-3 border-b border-gray-200 bg-white/80 px-6 backdrop-blur dark:border-gray-800 dark:bg-gray-900/80">
+          <PreferencesControls />
+        </div>
+        <div className="mx-auto w-full max-w-6xl flex-1 p-6">{children}</div>
       </main>
     </div>
   );
