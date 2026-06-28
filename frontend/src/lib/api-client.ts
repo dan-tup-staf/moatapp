@@ -686,6 +686,18 @@ export type ScoringConfig = {
   tier2_min: number;
 };
 
+export type EnrichmentProvider = {
+  key: string;
+  name: string;
+  description: string;
+  docs_url: string;
+  key_hint: string;
+  capabilities: string[];
+  connected: boolean;
+  enabled: boolean;
+  key_masked: string | null;
+};
+
 export type SignalSourcePreset = {
   key: string;
   category: string;
@@ -1460,6 +1472,29 @@ export const api = {
       authed<RunAllResult>(`/signal-sources/run-all`, { method: "POST" }),
     searchProvider: () =>
       authed<string>(`/signal-sources/search-provider`),
+  },
+
+  // Enrichment providers (Apollo / Lusha / Prospeo)
+  enrichment: {
+    providers: () =>
+      authed<EnrichmentProvider[]>("/enrichment/providers"),
+    connect: (provider: string, apiKey: string) =>
+      authed<EnrichmentProvider>(`/enrichment/${provider}/connect`, {
+        method: "POST",
+        body: JSON.stringify({ api_key: apiKey }),
+      }),
+    setEnabled: (provider: string, enabled: boolean) =>
+      authed<EnrichmentProvider>(`/enrichment/${provider}`, {
+        method: "PATCH",
+        body: JSON.stringify({ enabled }),
+      }),
+    disconnect: (provider: string) =>
+      authed<void>(`/enrichment/${provider}`, { method: "DELETE" }),
+    test: (provider: string) =>
+      authed<{ ready: boolean; message: string }>(
+        `/enrichment/${provider}/test`,
+        { method: "POST" },
+      ),
   },
 
   // Scoring config (tier thresholds)

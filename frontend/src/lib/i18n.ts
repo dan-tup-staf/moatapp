@@ -19,6 +19,7 @@ const EN: Dict = {
   Firmy: "Companies",
   Osoby: "People",
   Listy: "Lists",
+  "Wzbogacanie danych": "Data enrichment",
   Zaangażowanie: "Engagement",
   Kampanie: "Campaigns",
   Sekwencje: "Sequences",

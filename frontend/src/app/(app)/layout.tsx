@@ -11,6 +11,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   CreditCard,
+  Database,
   Eye,
   Flame,
   Globe,
@@ -38,7 +39,12 @@ type NavItem = { href: string; label: string; icon: LucideIcon };
 type NavGroup = { title?: string; items: NavItem[] };
 
 const NAV_GROUPS: NavGroup[] = [
-  { items: [{ href: "/start", label: "Zacznij tu", icon: Rocket }] },
+  {
+    items: [
+      { href: "/start", label: "Zacznij tu", icon: Rocket },
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    ],
+  },
   {
     title: "Strategia",
     items: [
@@ -54,6 +60,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/companies", label: "Firmy", icon: Building2 },
       { href: "/people", label: "Osoby", icon: Users },
       { href: "/lists", label: "Listy", icon: List },
+      { href: "/enrichment", label: "Wzbogacanie danych", icon: Database },
     ],
   },
   {
@@ -73,10 +80,6 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/warmup", label: "Rozgrzewanie", icon: Flame },
       { href: "/deliverability", label: "Dostarczalność", icon: ShieldCheck },
     ],
-  },
-  {
-    title: "Analiza",
-    items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }],
   },
 ];
 

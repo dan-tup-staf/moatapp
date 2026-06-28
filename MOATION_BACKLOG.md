@@ -9,21 +9,27 @@ Status: 🔜 do zrobienia · 🏗️ w toku · ✅ zrobione
 
 ---
 
-## Integracje wzbogacania danych (enrichment) — 🏗️ szkielet, czeka na klucze
+## Integracje wzbogacania danych (enrichment) — 🏗️ szkielet GOTOWY, czeka na klucze
 Cel: prawdziwe e-maile/telefony do firm i osób znalezionych filtrami (jak Lusha).
 Trzy dostawcy, użytkownik **dostarczy klucze API później**:
 1. **Apollo.io** — people/company search + email enrichment.
 2. **Lusha** — contact enrichment (email/phone) po nazwisku+firmie / LinkedIn.
 3. **Prospeo** — email finder (domena+imię/nazwisko, LinkedIn URL → email).
 
-Zakres do zbudowania:
-- [ ] Klucze API w ustawieniach (per-user, szyfrowane jak SMTP/cookies LinkedIn).
-- [ ] Warstwa `app/services/enrichment/` z jednym interfejsem + 3 adaptery.
-- [ ] „Wzbogać” na liście obserwowanej / w wynikach wyszukiwarki prospektów:
-      uzupełnia email/telefon i (dla osób z mailem) pozwala załadować jako leady.
-- [ ] Wybór dostawcy + fallback (np. Prospeo → Apollo → Lusha) i licznik kredytów.
-- [ ] Gating: bez klucza pokazujemy CTA „podłącz dostawcę”, nie wywalamy błędu.
-> Klucze: patrz `TODO_USER.md`. Bez nich integracje są nieaktywne (placeholder).
+✅ Zrobione (szkielet):
+- Model `EnrichmentIntegration` (klucz szyfrowany Fernet) + migracja 0032.
+- API `/enrichment`: providers/connect/patch/disconnect/test.
+- Service `app/services/enrichment.py` — katalog dostawców + connect/get_api_key;
+  `enrich_contact()` to STUB rzucający `EnrichmentNotReady`.
+- Front: strona `/enrichment` („Wzbogacanie danych”, nav w Pozyskiwaniu) — karty
+  3 dostawców, podłączanie klucza, status, maskowanie klucza.
+
+🔜 Do dokończenia (gdy będą klucze):
+- [ ] Implementacja realnych wywołań HTTP per-dostawca w `enrich_contact()`.
+- [ ] Akcja „Wzbogać” na liście obserwowanej / w wynikach wyszukiwarki prospektów
+      (uzupełnia email/telefon; osoby z mailem → ładowalne jako leady).
+- [ ] Fallback (Prospeo → Apollo → Lusha) + licznik kredytów.
+> Klucze: patrz `TODO_USER.md`.
 
 ## Landing page MOATION + freemium signup — 🔜
 - [ ] Publiczna strona `/` (dla niezalogowanych): hero, value prop, sekcje funkcji
