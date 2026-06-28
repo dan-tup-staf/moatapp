@@ -1,5 +1,6 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -459,6 +460,19 @@ function TemplatesPanel({
     }
   }
 
+  async function removeTemplate(t: SequenceTemplateInfo) {
+    if (!t.id.startsWith("u")) return;
+    if (!confirm(`Usunąć szablon „${t.name}"?`)) return;
+    const tid = Number(t.id.slice(1));
+    try {
+      await api.campaigns.deleteTemplate(tid);
+      setTemplates((prev) => prev.filter((x) => x.id !== t.id));
+      if (pick?.id === t.id) setPick(null);
+    } catch {
+      /* ignore */
+    }
+  }
+
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <h3 className="text-sm font-semibold text-gray-900">
@@ -471,19 +485,28 @@ function TemplatesPanel({
 
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         {templates.map((t) => (
-          <button
+          <div
             key={t.id}
             onClick={() => setPick(t)}
+            role="button"
+            tabIndex={0}
             className={
-              "rounded-lg border p-3 text-left transition " +
+              "relative cursor-pointer rounded-lg border p-3 text-left transition " +
               (pick?.id === t.id
                 ? "border-gray-900 ring-1 ring-gray-900"
                 : "border-gray-200 hover:border-gray-300")
             }
           >
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <span className="font-medium text-gray-900">{t.name}</span>
-              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">
+              <span
+                className={
+                  "rounded-full px-2 py-0.5 text-[10px] " +
+                  (t.id.startsWith("u")
+                    ? "bg-indigo-50 text-indigo-600"
+                    : "bg-gray-100 text-gray-600")
+                }
+              >
                 {t.category}
               </span>
             </div>
@@ -491,7 +514,19 @@ function TemplatesPanel({
             <p className="mt-1.5 text-[11px] text-gray-400">
               {t.steps_count} kroków · {t.channels.join(", ")}
             </p>
-          </button>
+            {t.id.startsWith("u") && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void removeTemplate(t);
+                }}
+                title="Usuń szablon"
+                className="absolute bottom-2 right-2 rounded-md p-1 text-gray-300 hover:bg-red-50 hover:text-red-600"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         ))}
       </div>
 

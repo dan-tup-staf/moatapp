@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
+  BookmarkPlus,
   CheckCircle2,
   GitBranch,
   ListOrdered,
@@ -267,6 +268,9 @@ export default function CampaignDetailPage() {
   const [sending, setSending] = useState(false);
   const [sendMsg, setSendMsg] = useState<string | null>(null);
 
+  // Save-as-template state
+  const [savingTmpl, setSavingTmpl] = useState(false);
+
   // Audience builder state
   const [sources, setSources] = useState<SignalSummary[]>([]);
   const [showBuilder, setShowBuilder] = useState(false);
@@ -334,6 +338,28 @@ export default function CampaignDetailPage() {
       setSendMsg(err instanceof ApiError ? `Błąd: ${err.detail}` : "Błąd");
     } finally {
       setSending(false);
+    }
+  }
+
+  async function handleSaveAsTemplate() {
+    const name = window.prompt(
+      "Nazwa szablonu:",
+      campaign?.name ? `${campaign.name} (szablon)` : "",
+    );
+    if (!name || !name.trim()) return;
+    setSavingTmpl(true);
+    setSendMsg(null);
+    try {
+      await api.campaigns.saveAsTemplate(campaignId, { name: name.trim() });
+      setSendMsg(
+        `Zapisano sekwencję jako szablon „${name.trim()}". Znajdziesz go w „Szablony sekwencji".`,
+      );
+    } catch (err) {
+      setSendMsg(
+        err instanceof ApiError ? `Błąd: ${err.detail}` : "Błąd zapisu szablonu",
+      );
+    } finally {
+      setSavingTmpl(false);
     }
   }
 
@@ -417,6 +443,15 @@ export default function CampaignDetailPage() {
             >
               <SendIcon className="h-3.5 w-3.5" />
               {sending ? "Wysyłam…" : "Wyślij należne"}
+            </button>
+            <button
+              onClick={handleSaveAsTemplate}
+              disabled={savingTmpl || steps.length === 0}
+              title="Zapisz tę sekwencję jako szablon wielokrotnego użytku"
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-100 disabled:opacity-50"
+            >
+              <BookmarkPlus className="h-3.5 w-3.5" />
+              {savingTmpl ? "Zapisuję…" : "Zapisz jako szablon"}
             </button>
             {canToggle && (
               <button

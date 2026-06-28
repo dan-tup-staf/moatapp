@@ -123,6 +123,11 @@ class FromTemplateRequest(BaseModel):
     group_id: int | None = None
 
 
+class SaveAsTemplateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    description: str = Field(default="", max_length=512)
+
+
 class CampaignCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     from_email: EmailStr

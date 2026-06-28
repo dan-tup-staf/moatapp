@@ -9,6 +9,7 @@ from app.models.linkedin_account import LinkedInAccount
 from app.models.message import Message
 from app.models.sequence_branch import SequenceBranch
 from app.models.sequence_step import SequenceStep
+from app.models.sequence_template import SequenceTemplate
 from app.models.signal import Signal
 from app.models.signal_source import SignalSource
 from app.models.user import User
@@ -30,4 +31,5 @@ __all__ = [
     "LinkedInAccount",
     "Webhook",
     "InboundMessage",
+    "SequenceTemplate",
 ]

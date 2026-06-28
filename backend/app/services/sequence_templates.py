@@ -149,22 +149,21 @@ TEMPLATES: list[dict] = [
 ]
 
 
+def _info(t: dict) -> dict:
+    channels = sorted({s["channel"] for s in t["steps"]})
+    return {
+        "id": t["id"],
+        "name": t["name"],
+        "description": t["description"],
+        "category": t["category"],
+        "steps_count": len(t["steps"]),
+        "channels": channels,
+    }
+
+
 def list_templates() -> list[dict]:
-    """Templates without full step bodies — for the picker list."""
-    out = []
-    for t in TEMPLATES:
-        channels = sorted({s["channel"] for s in t["steps"]})
-        out.append(
-            {
-                "id": t["id"],
-                "name": t["name"],
-                "description": t["description"],
-                "category": t["category"],
-                "steps_count": len(t["steps"]),
-                "channels": channels,
-            }
-        )
-    return out
+    """Built-in templates (info only) — for the picker list."""
+    return [_info(t) for t in TEMPLATES]
 
 
 def get_template(template_id: str) -> dict | None:
@@ -172,3 +171,102 @@ def get_template(template_id: str) -> dict | None:
         if t["id"] == template_id:
             return t
     return None
+
+
+# ---------- User-saved templates (DB) ----------
+
+
+async def list_all_for_user(db, user_id: int) -> list[dict]:
+    """Built-in + the user's own saved templates, as picker info dicts.
+    User template ids are prefixed `u<db_id>`."""
+    from sqlalchemy import select
+
+    from app.models.sequence_template import SequenceTemplate
+
+    out = list_templates()
+    rows = (
+        await db.execute(
+            select(SequenceTemplate)
+            .where(SequenceTemplate.user_id == user_id)
+            .order_by(SequenceTemplate.created_at.desc())
+        )
+    ).scalars().all()
+    for r in rows:
+        out.append(
+            _info(
+                {
+                    "id": f"u{r.id}",
+                    "name": r.name,
+                    "description": r.description,
+                    "category": "Moje szablony",
+                    "steps": r.steps or [],
+                }
+            )
+        )
+    return out
+
+
+async def resolve_template(db, user_id: int, template_id: str) -> dict | None:
+    """Return a full template (with steps) by id — built-in or user-saved."""
+    if template_id.startswith("u") and template_id[1:].isdigit():
+        from app.models.sequence_template import SequenceTemplate
+
+        r = await db.get(SequenceTemplate, int(template_id[1:]))
+        if r is None or r.user_id != user_id:
+            return None
+        return {
+            "id": template_id,
+            "name": r.name,
+            "description": r.description,
+            "category": "Moje szablony",
+            "steps": r.steps or [],
+        }
+    return get_template(template_id)
+
+
+async def save_campaign_as_template(
+    db, user_id: int, campaign_id: int, name: str, description: str
+):
+    """Snapshot a campaign's steps into a reusable user template."""
+    from sqlalchemy import select
+
+    from app.models.sequence_step import SequenceStep
+    from app.models.sequence_template import SequenceTemplate
+
+    steps = (
+        await db.execute(
+            select(SequenceStep)
+            .where(SequenceStep.campaign_id == campaign_id)
+            .order_by(SequenceStep.step_order.asc(), SequenceStep.id.asc())
+        )
+    ).scalars().all()
+    payload = [
+        {
+            "subject": s.subject,
+            "body_template": s.body_template,
+            "delay_days": s.delay_days,
+            "channel": s.channel,
+        }
+        for s in steps
+    ]
+    obj = SequenceTemplate(
+        user_id=user_id,
+        name=name[:255],
+        description=(description or "")[:512],
+        steps=payload,
+    )
+    db.add(obj)
+    await db.commit()
+    await db.refresh(obj)
+    return obj
+
+
+async def delete_user_template(db, user_id: int, tid: int) -> bool:
+    from app.models.sequence_template import SequenceTemplate
+
+    r = await db.get(SequenceTemplate, tid)
+    if r is None or r.user_id != user_id:
+        return False
+    await db.delete(r)
+    await db.commit()
+    return True

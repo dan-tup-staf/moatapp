@@ -29,6 +29,7 @@ from app.schemas.campaigns import (
     FromTemplateRequest,
     PreviewRequest,
     PreviewResponse,
+    SaveAsTemplateRequest,
     SequenceScore,
     SequenceTemplateInfo,
     StepCreate,
@@ -122,10 +123,31 @@ async def create_one(
 
 
 @router.get("/templates", response_model=list[SequenceTemplateInfo])
-async def list_templates() -> list[SequenceTemplateInfo]:
+async def list_templates(
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[SequenceTemplateInfo]:
     from app.services import sequence_templates as tmpl
 
-    return [SequenceTemplateInfo(**t) for t in tmpl.list_templates()]
+    return [
+        SequenceTemplateInfo(**t)
+        for t in await tmpl.list_all_for_user(db, current.id)
+    ]
+
+
+@router.delete(
+    "/templates/{tid}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def delete_template(
+    tid: int,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    from app.services import sequence_templates as tmpl
+
+    ok = await tmpl.delete_user_template(db, current.id, tid)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Nie znaleziono szablonu")
 
 
 @router.post(
@@ -140,7 +162,7 @@ async def create_from_template(
 ) -> CampaignRead:
     from app.services import sequence_templates as tmpl
 
-    t = tmpl.get_template(payload.template_id)
+    t = await tmpl.resolve_template(db, current.id, payload.template_id)
     if t is None:
         raise HTTPException(status_code=404, detail="Nie znaleziono szablonu")
     camp = await svc.create_campaign(
@@ -166,6 +188,42 @@ async def create_from_template(
             ),
         )
     return _to_campaign_read(camp, len(t["steps"]), 0)
+
+
+@router.post(
+    "/{campaign_id}/save-as-template",
+    response_model=SequenceTemplateInfo,
+    status_code=status.HTTP_201_CREATED,
+)
+async def save_as_template(
+    campaign_id: int,
+    payload: SaveAsTemplateRequest,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SequenceTemplateInfo:
+    from app.services import sequence_templates as tmpl
+
+    await _ensure_owned_campaign(db, current, campaign_id)
+    steps = await svc.list_steps(db, campaign_id)
+    if not steps:
+        raise HTTPException(
+            status_code=400,
+            detail="Sekwencja nie ma kroków — nie ma czego zapisać.",
+        )
+    obj = await tmpl.save_campaign_as_template(
+        db, current.id, campaign_id, payload.name, payload.description
+    )
+    return SequenceTemplateInfo(
+        **tmpl._info(
+            {
+                "id": f"u{obj.id}",
+                "name": obj.name,
+                "description": obj.description,
+                "category": "Moje szablony",
+                "steps": obj.steps or [],
+            }
+        )
+    )
 
 
 @router.get("/{campaign_id}", response_model=CampaignRead)

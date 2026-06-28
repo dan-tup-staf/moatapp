@@ -1109,6 +1109,16 @@ export const api = {
         method: "POST",
         body: JSON.stringify(data),
       }),
+    saveAsTemplate: (
+      id: number,
+      data: { name: string; description?: string }
+    ) =>
+      authed<SequenceTemplateInfo>(`/campaigns/${id}/save-as-template`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    deleteTemplate: (tid: number) =>
+      authed<void>(`/campaigns/templates/${tid}`, { method: "DELETE" }),
 
     get: (id: number) => authed<Campaign>(`/campaigns/${id}`),
 
