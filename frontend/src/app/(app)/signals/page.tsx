@@ -17,7 +17,9 @@ import {
   Users,
 } from "lucide-react";
 
-import { api, ApiError, SignalSummary, SourceType } from "@/lib/api-client";
+import { api, ApiError, Signal, SignalSummary, SourceType } from "@/lib/api-client";
+
+type FeedMode = null | "all" | "companies" | "linked";
 
 const TYPE_LABELS: Record<SourceType, string> = {
   rss: "RSS",
@@ -139,6 +141,29 @@ export default function SignalsPage() {
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
 
+  // Drill-down feed: clicking a summary tile reveals the underlying signals.
+  const [feedMode, setFeedMode] = useState<FeedMode>(null);
+  const [feedSignals, setFeedSignals] = useState<Signal[] | null>(null);
+  const [feedLoading, setFeedLoading] = useState(false);
+
+  async function openFeed(mode: Exclude<FeedMode, null>) {
+    if (feedMode === mode) {
+      setFeedMode(null);
+      return;
+    }
+    setFeedMode(mode);
+    if (feedSignals === null) {
+      setFeedLoading(true);
+      try {
+        setFeedSignals(await api.signals.list({ limit: 300 }));
+      } catch {
+        setFeedSignals([]);
+      } finally {
+        setFeedLoading(false);
+      }
+    }
+  }
+
   async function refresh() {
     setLoading(true);
     setError(null);
@@ -218,19 +243,23 @@ export default function SignalsPage() {
         </button>
       </div>
 
-      {/* Summary tiles */}
+      {/* Summary tiles — clickable to reveal the underlying signals */}
       <div className="grid grid-cols-3 gap-4">
         <SummaryTile
           icon={Bell}
           accent="bg-amber-100 text-amber-700"
           value={totalSignals}
           label="Detekcji"
+          active={feedMode === "all"}
+          onClick={() => openFeed("all")}
         />
         <SummaryTile
           icon={Building2}
           accent="bg-blue-100 text-blue-700"
           value={totalCompanies}
           label="Firm z sygnałem"
+          active={feedMode === "companies"}
+          onClick={() => openFeed("companies")}
         />
         <SummaryTile
           icon={TrendingUp}
@@ -238,8 +267,19 @@ export default function SignalsPage() {
           value={totalImpact}
           label="Wpływ na pipeline"
           prefix="+"
+          active={feedMode === "linked"}
+          onClick={() => openFeed("linked")}
         />
       </div>
+
+      {feedMode && (
+        <SignalsFeed
+          mode={feedMode}
+          loading={feedLoading}
+          signals={feedSignals ?? []}
+          onClose={() => setFeedMode(null)}
+        />
+      )}
 
       {/* Filters */}
       <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-3">
@@ -476,25 +516,148 @@ function SummaryTile({
   value,
   label,
   prefix = "",
+  active = false,
+  onClick,
 }: {
   icon: LucideIcon;
   accent: string;
   value: number;
   label: string;
   prefix?: string;
+  active?: boolean;
+  onClick?: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-      <div
-        className={`flex h-8 w-8 items-center justify-center rounded-lg ${accent}`}
-      >
-        <Icon className="h-4 w-4" />
+    <button
+      onClick={onClick}
+      className={
+        "rounded-xl border bg-white p-4 text-left shadow-sm transition hover:border-gray-300 hover:shadow-md " +
+        (active ? "border-gray-900 ring-1 ring-gray-900" : "border-gray-200")
+      }
+    >
+      <div className="flex items-center justify-between">
+        <div
+          className={`flex h-8 w-8 items-center justify-center rounded-lg ${accent}`}
+        >
+          <Icon className="h-4 w-4" />
+        </div>
+        <span className="text-[11px] font-medium text-gray-400">
+          {active ? "ukryj ▲" : "pokaż ▼"}
+        </span>
       </div>
       <p className="mt-3 text-2xl font-bold text-gray-900">
         {prefix}
         {value}
       </p>
       <p className="text-xs text-gray-500">{label}</p>
+    </button>
+  );
+}
+
+const FEED_TITLES: Record<Exclude<FeedMode, null>, string> = {
+  all: "Wszystkie detekcje",
+  companies: "Sygnały wg firm",
+  linked: "Sygnały z wpływem na pipeline (dopięte do leada)",
+};
+
+function SignalsFeed({
+  mode,
+  loading,
+  signals,
+  onClose,
+}: {
+  mode: Exclude<FeedMode, null>;
+  loading: boolean;
+  signals: Signal[];
+  onClose: () => void;
+}) {
+  const filtered =
+    mode === "linked"
+      ? signals.filter((s) => s.lead_id != null)
+      : mode === "companies"
+        ? signals.filter(
+            (s) =>
+              !!s.company_domain ||
+              !!(s.payload?.company_name as string | undefined),
+          )
+        : signals;
+
+  function company(s: Signal): string {
+    return (
+      (s.payload?.company_name as string | undefined) ||
+      s.company_domain ||
+      "(bez firmy)"
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900">
+            {FEED_TITLES[mode]}
+          </h3>
+          <p className="text-xs text-gray-500">
+            {loading ? "Ładuję…" : `${filtered.length} sygnałów`}
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="rounded-md px-2 py-1 text-xs text-gray-500 hover:bg-gray-100"
+        >
+          Zamknij
+        </button>
+      </div>
+
+      {loading ? (
+        <p className="p-6 text-center text-sm text-gray-500">Ładuję…</p>
+      ) : filtered.length === 0 ? (
+        <p className="p-6 text-center text-sm text-gray-500">
+          Brak sygnałów w tym widoku.
+        </p>
+      ) : (
+        <div className="max-h-[480px] divide-y divide-gray-100 overflow-y-auto">
+          {filtered.map((s) => (
+            <div key={s.id} className="flex items-start gap-3 px-4 py-2.5">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-sm font-medium text-gray-900">
+                    {s.url ? (
+                      <a
+                        href={s.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="hover:text-indigo-600 hover:underline"
+                      >
+                        {s.title}
+                      </a>
+                    ) : (
+                      s.title
+                    )}
+                  </span>
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500">
+                  <span className="inline-flex items-center gap-1">
+                    <Building2 className="h-3 w-3" /> {company(s)}
+                  </span>
+                  {s.source_name && <span>· {s.source_name}</span>}
+                  <span>
+                    · {new Date(s.detected_at).toLocaleDateString("pl-PL")}
+                  </span>
+                  {s.lead_email && (
+                    <span className="text-emerald-600">· {s.lead_email}</span>
+                  )}
+                </div>
+              </div>
+              {s.lead_id != null && (
+                <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                  +{s.score_weight}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
