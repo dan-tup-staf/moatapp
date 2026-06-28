@@ -11,6 +11,17 @@ B2B SaaS do outreachu opartego o sygnały zakupowe (intent data). Stack:
 - **AI:** Google **Gemini** (darmowy, `GEMINI_API_KEY`) z grounding; warstwa
   `backend/app/llm.py` (Gemini albo Anthropic — pierwszy skonfigurowany wygrywa).
 
+## 🛑 PUŁAPKA DEPLOYU (z 2026-06) — front OOM na Render free
+- `moation-web` jest na planie **free (512 MB)**, build = `npm install && npm run
+  build`. Gdy appka urosła, **`next build` zaczął padać na OOM** (killed) — Render
+  zostawał na STARYM buildzie, a backend (Docker) deployował się dalej → user
+  „widzi stare" i mismatch shape (np. /people). Naprawa: w `package.json`
+  `NODE_OPTIONS=--max-old-space-size=448` + `next.config.mjs`
+  `experimental.webpackMemoryOptimizations`. Jeśli dalej pada — **bump `moation-web`
+  na Starter** (więcej RAM na build) albo dalej odchudzaj build. ZAWSZE, gdy user
+  mówi „nie widzę zmian na froncie", sprawdź NAJPIERW status deployu `moation-web`
+  (Events/Logs), nie zakładaj że to cache.
+
 ## ⚠️ Workflow gita/deployu (KLUCZOWE)
 - Pracujemy na branchu **`claude/awesome-babbage-hjyva9`** (zmienia się per sesja),
   ALE **Render buduje `main`**. Dlatego **po KAŻDEJ zmianie: commit → merge
