@@ -18,6 +18,7 @@ from app.api.v1 import (
     signal_sources,
     signals,
     track,
+    webhooks,
 )
 
 api_router = APIRouter()
@@ -36,5 +37,6 @@ api_router.include_router(email.router)
 api_router.include_router(domains.router)
 api_router.include_router(email_accounts.router)
 api_router.include_router(linkedin_accounts.router)
+api_router.include_router(webhooks.router)
 api_router.include_router(track.router)
 api_router.include_router(ops.router)

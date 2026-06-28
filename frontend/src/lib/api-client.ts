@@ -150,6 +150,25 @@ export type LinkedInAccountUpdate = Partial<LinkedInAccountCreate> & {
 
 export type LinkedInTestResult = { ok: boolean; detail: string };
 
+export type Webhook = {
+  id: number;
+  url: string;
+  events: string[];
+  active: boolean;
+  last_status: number | null;
+  last_error: string | null;
+  last_fired_at: string | null;
+  created_at: string;
+};
+
+export type WebhookCreate = {
+  url: string;
+  secret?: string;
+  events?: string[];
+};
+
+export type WebhookTestResult = { ok: boolean; detail: string };
+
 export type EmailAccountSetup = {
   domain: string;
   score: number;
@@ -927,6 +946,21 @@ export const api = {
       authed<LinkedInTestResult>(`/linkedin-accounts/${id}/test`, {
         method: "POST",
       }),
+  },
+
+  // Outbound webhooks (CRM push)
+  webhooks: {
+    list: () => authed<Webhook[]>("/webhooks"),
+    events: () => authed<string[]>("/webhooks/events"),
+    create: (data: WebhookCreate) =>
+      authed<Webhook>("/webhooks", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    delete: (id: number) =>
+      authed<void>(`/webhooks/${id}`, { method: "DELETE" }),
+    test: (id: number) =>
+      authed<WebhookTestResult>(`/webhooks/${id}/test`, { method: "POST" }),
   },
 
   // Campaign groups (umbrella "Kampanie" over sequences)

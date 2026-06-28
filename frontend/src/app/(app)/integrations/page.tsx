@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import {
   ArrowLeftToLine,
   ArrowRightToLine,
@@ -9,10 +9,13 @@ import {
   Construction,
   Mail,
   type LucideIcon,
+  Plus,
   Sparkles,
+  Trash2,
+  Webhook as WebhookIcon,
 } from "lucide-react";
 
-import { api, ApiError, EmailStatus } from "@/lib/api-client";
+import { api, ApiError, EmailStatus, Webhook } from "@/lib/api-client";
 
 type Integration = {
   id: string;
@@ -154,6 +157,8 @@ export default function IntegrationsPage() {
       </div>
 
       <MailboxCard />
+
+      <WebhooksCard />
 
       <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
         <Construction className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
@@ -305,6 +310,217 @@ function MailboxCard() {
         >
           {msg.text}
         </p>
+      )}
+    </div>
+  );
+}
+
+const EVENT_LABELS: Record<string, string> = {
+  lead_replied: "Odpowiedź leada",
+  lead_bounced: "Twarde odbicie",
+  lead_unsubscribed: "Wypisanie",
+  outcome_changed: "Zmiana wyniku (zainteresowany/spotkanie/zamknięty)",
+};
+
+function WebhooksCard() {
+  const [hooks, setHooks] = useState<Webhook[]>([]);
+  const [events, setEvents] = useState<string[]>([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [url, setUrl] = useState("");
+  const [secret, setSecret] = useState("");
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function refresh() {
+    try {
+      const [h, e] = await Promise.all([
+        api.webhooks.list(),
+        api.webhooks.events().catch(() => []),
+      ]);
+      setHooks(h);
+      setEvents(e);
+    } catch {
+      setHooks([]);
+    }
+  }
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  function toggle(ev: string) {
+    setPicked((p) => {
+      const n = new Set(p);
+      if (n.has(ev)) n.delete(ev);
+      else n.add(ev);
+      return n;
+    });
+  }
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await api.webhooks.create({
+        url: url.trim(),
+        secret: secret.trim() || undefined,
+        events: Array.from(picked),
+      });
+      setUrl("");
+      setSecret("");
+      setPicked(new Set());
+      setShowAdd(false);
+      refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Błąd zapisu");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function test(id: number) {
+    try {
+      const res = await api.webhooks.test(id);
+      alert(res.ok ? `✅ Dostarczono (${res.detail})` : `❌ ${res.detail}`);
+      refresh();
+    } catch (err) {
+      alert(err instanceof ApiError ? err.detail : "Błąd");
+    }
+  }
+
+  async function remove(id: number) {
+    if (!window.confirm("Usunąć webhook?")) return;
+    await api.webhooks.delete(id);
+    refresh();
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-700">
+            <WebhookIcon className="h-4 w-4" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900">Webhooki (CRM push)</h3>
+            <p className="mt-0.5 text-sm text-gray-600">
+              MOATION wyśle zdarzenia (odpowiedź, wynik, odbicie) jako JSON z
+              podpisem HMAC na Twój URL. Wepnij w Zapier / Make / n8n lub własny
+              endpoint, by pchać do dowolnego CRM.
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => setShowAdd((v) => !v)}
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          {showAdd ? "Anuluj" : "Dodaj"}
+        </button>
+      </div>
+
+      {showAdd && (
+        <form
+          onSubmit={submit}
+          className="mt-3 space-y-3 rounded-lg border border-gray-200 p-3"
+        >
+          <input
+            type="url"
+            required
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://hooks.zapier.com/… (URL webhooka)"
+            className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          />
+          <input
+            type="text"
+            value={secret}
+            onChange={(e) => setSecret(e.target.value)}
+            placeholder="Sekret HMAC (opcjonalnie — do weryfikacji podpisu)"
+            className="block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          />
+          <div>
+            <p className="mb-1 text-xs font-medium uppercase text-gray-500">
+              Zdarzenia (puste = wszystkie)
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {events.map((ev) => (
+                <label
+                  key={ev}
+                  className={
+                    "cursor-pointer rounded-full border px-2.5 py-1 text-xs transition " +
+                    (picked.has(ev)
+                      ? "border-gray-900 bg-gray-900 text-white"
+                      : "border-gray-300 text-gray-700 hover:bg-gray-50")
+                  }
+                >
+                  <input
+                    type="checkbox"
+                    checked={picked.has(ev)}
+                    onChange={() => toggle(ev)}
+                    className="hidden"
+                  />
+                  {EVENT_LABELS[ev] ?? ev}
+                </label>
+              ))}
+            </div>
+          </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <button
+            disabled={saving}
+            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          >
+            {saving ? "Zapisuję…" : "Zapisz webhook"}
+          </button>
+        </form>
+      )}
+
+      {hooks.length > 0 && (
+        <ul className="mt-3 divide-y divide-gray-100">
+          {hooks.map((h) => (
+            <li
+              key={h.id}
+              className="flex items-center justify-between gap-3 py-2.5"
+            >
+              <div className="min-w-0">
+                <p className="truncate font-mono text-xs text-gray-800">
+                  {h.url}
+                </p>
+                <p className="text-[11px] text-gray-500">
+                  {h.events.length
+                    ? h.events.map((e) => EVENT_LABELS[e] ?? e).join(", ")
+                    : "wszystkie zdarzenia"}
+                  {h.last_status != null && (
+                    <span
+                      className={
+                        h.last_status < 400
+                          ? "ml-1 text-emerald-600"
+                          : "ml-1 text-rose-600"
+                      }
+                    >
+                      · ostatnio HTTP {h.last_status}
+                    </span>
+                  )}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  onClick={() => test(h.id)}
+                  className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium hover:bg-gray-100"
+                >
+                  Test
+                </button>
+                <button
+                  onClick={() => remove(h.id)}
+                  className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

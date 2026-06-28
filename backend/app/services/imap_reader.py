@@ -198,12 +198,20 @@ async def poll_account_replies(db: AsyncSession, account: EmailAccount) -> int:
                 )
             )
         ).all()
+        from app.services.webhooks import fire, lead_payload
+
         for enr, lead in rows:
             enr.status = "replied"
             enr.next_send_at = None
             if lead.status not in ("unsubscribed", "bounced"):
                 lead.status = "replied"
             transitioned += 1
+            await fire(
+                db,
+                account.user_id,
+                "lead_replied",
+                {"campaign_id": enr.campaign_id, "lead": lead_payload(lead)},
+            )
 
     bounced_now = 0
     if bounces:
@@ -221,11 +229,19 @@ async def poll_account_replies(db: AsyncSession, account: EmailAccount) -> int:
                 )
             )
         ).all()
+        from app.services.webhooks import fire, lead_payload
+
         for enr, lead in rows:
             enr.status = "bounced"
             enr.next_send_at = None
             lead.status = "bounced"
             bounced_now += 1
+            await fire(
+                db,
+                account.user_id,
+                "lead_bounced",
+                {"campaign_id": enr.campaign_id, "lead": lead_payload(lead)},
+            )
 
     # Warm-up is fragile: even a couple of bounces tank a young sender's
     # reputation, so pause the ramp earlier than we'd pause the whole mailbox.

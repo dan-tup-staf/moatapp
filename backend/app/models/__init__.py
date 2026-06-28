@@ -11,6 +11,7 @@ from app.models.sequence_step import SequenceStep
 from app.models.signal import Signal
 from app.models.signal_source import SignalSource
 from app.models.user import User
+from app.models.webhook import Webhook
 
 __all__ = [
     "User",
@@ -26,4 +27,5 @@ __all__ = [
     "Signal",
     "IcpProfile",
     "LinkedInAccount",
+    "Webhook",
 ]

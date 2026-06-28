@@ -453,6 +453,23 @@ async def update_enrollment(
     if enr is None:
         raise HTTPException(status_code=404, detail="Enrollment not found")
     enr = await svc.update_enrollment(db, enr, payload)
+    # Push outcome changes to the user's webhooks (CRM).
+    if payload.outcome is not None:
+        from app.models.lead import Lead
+        from app.services.webhooks import fire, lead_payload
+
+        lead = await db.get(Lead, enr.lead_id)
+        if lead is not None:
+            await fire(
+                db,
+                current.id,
+                "outcome_changed",
+                {
+                    "campaign_id": campaign_id,
+                    "outcome": enr.outcome,
+                    "lead": lead_payload(lead),
+                },
+            )
     item = EnrollmentRead.model_validate(enr)
     item.tags = svc.split_tags(enr.tags)
     return item
