@@ -2,6 +2,7 @@ from app.models.campaign import Campaign
 from app.models.campaign_enrollment import CampaignEnrollment
 from app.models.email_account import EmailAccount
 from app.models.icp_profile import IcpProfile
+from app.models.inbound_message import InboundMessage
 from app.models.lead import Lead
 from app.models.lead_list import LeadList
 from app.models.linkedin_account import LinkedInAccount
@@ -28,4 +29,5 @@ __all__ = [
     "IcpProfile",
     "LinkedInAccount",
     "Webhook",
+    "InboundMessage",
 ]

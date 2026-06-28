@@ -469,6 +469,36 @@ async def send_test_email(to_email: str) -> None:
     )
 
 
+async def send_direct(
+    account,
+    to_email: str,
+    subject: str,
+    body: str,
+    in_reply_to: str | None = None,
+) -> str:
+    """Send a one-off message (e.g. an inbox reply) from a connected mailbox,
+    threaded into the conversation when in_reply_to is given. Returns the
+    generated Message-ID. Raises on SMTP failure."""
+    creds = _creds_from_account(account)
+    if creds is None:
+        raise RuntimeError("Skrzynka nie ma skonfigurowanego SMTP/hasła")
+    out_mid = make_msgid(
+        domain=(account.email.split("@")[-1] if "@" in account.email else None)
+    )
+    await _send_via_smtp(
+        to_email=to_email,
+        from_email=account.email,
+        from_name=account.from_name,
+        subject=subject,
+        body=body,
+        creds=creds,
+        message_id=out_mid,
+        in_reply_to=in_reply_to,
+        references=in_reply_to,
+    )
+    return out_mid
+
+
 async def send_account_test(account) -> None:
     """Send a test email through a connected EmailAccount's own SMTP creds
     (decrypting its stored password). Sends to the account's own address.

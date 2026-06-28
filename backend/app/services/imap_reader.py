@@ -109,10 +109,13 @@ def _parse_hard_bounces(raw: bytes) -> set[str]:
 
 
 def _scan_inbox(host: str, port: int, user: str, password: str,
-                since: datetime) -> tuple[set[str], set[str]]:
-    """Blocking IMAP scan — returns (reply_senders, hard_bounced_recipients)
-    seen in INBOX since `since`. Runs in a thread."""
-    replies: set[str] = set()
+                since: datetime) -> tuple[list[dict], set[str]]:
+    """Blocking IMAP scan — returns (reply_messages, hard_bounced_recipients)
+    seen in INBOX since `since`. Each reply is a dict with from/subject/body/
+    message_id/date. Bodies are only fetched for actual replies (have
+    In-Reply-To/References or a "Re:" subject) to keep the scan cheap. Runs in
+    a thread."""
+    replies: list[dict] = []
     bounces: set[str] = set()
     conn = imaplib.IMAP4_SSL(host, port)
     try:
@@ -125,7 +128,9 @@ def _scan_inbox(host: str, port: int, user: str, password: str,
         # Cap the scan so a huge inbox can't stall a tick.
         for num in ids[-300:]:
             typ, msg_data = conn.fetch(
-                num, "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT)])"
+                num,
+                "(BODY.PEEK[HEADER.FIELDS "
+                "(FROM SUBJECT MESSAGE-ID IN-REPLY-TO REFERENCES DATE)])",
             )
             if typ != "OK" or not msg_data:
                 continue
@@ -139,20 +144,67 @@ def _scan_inbox(host: str, port: int, user: str, password: str,
             _, addr = parseaddr(hdr.get("From", ""))
             subject = str(hdr.get("Subject", ""))
             if _looks_like_bounce(addr or "", subject):
-                # Fetch the full DSN to pull the failed recipient(s).
                 typ2, full = conn.fetch(num, "(BODY.PEEK[])")
                 if typ2 == "OK" and full:
                     for fp in full:
                         if isinstance(fp, tuple) and fp[1]:
                             bounces |= _parse_hard_bounces(fp[1])
-            elif addr:
-                replies.add(addr.strip().lower())
+                continue
+            if not addr:
+                continue
+            is_reply = bool(
+                hdr.get("In-Reply-To")
+                or hdr.get("References")
+                or subject.lower().startswith("re:")
+            )
+            if not is_reply:
+                continue
+            typ2, full = conn.fetch(num, "(BODY.PEEK[])")
+            body = ""
+            if typ2 == "OK" and full:
+                for fp in full:
+                    if isinstance(fp, tuple) and fp[1]:
+                        body = _extract_text_body(fp[1])
+                        break
+            replies.append(
+                {
+                    "from": addr.strip().lower(),
+                    "subject": subject[:512],
+                    "body": body[:8000],
+                    "message_id": (hdr.get("Message-ID") or "")[:255] or None,
+                    "date": hdr.get("Date"),
+                }
+            )
     finally:
         try:
             conn.logout()
         except Exception:  # noqa: BLE001
             pass
     return replies, bounces
+
+
+def _extract_text_body(raw: bytes) -> str:
+    """Best-effort plain-text body from a raw RFC822 message."""
+    try:
+        msg = email.message_from_bytes(raw)
+    except Exception:  # noqa: BLE001
+        return ""
+    if msg.is_multipart():
+        for part in msg.walk():
+            if part.get_content_type() == "text/plain" and not part.get(
+                "Content-Disposition"
+            ):
+                try:
+                    return (part.get_payload(decode=True) or b"").decode(
+                        "utf-8", "ignore"
+                    )
+                except Exception:  # noqa: BLE001
+                    continue
+        return ""
+    try:
+        return (msg.get_payload(decode=True) or b"").decode("utf-8", "ignore")
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 async def poll_account_replies(db: AsyncSession, account: EmailAccount) -> int:
@@ -184,7 +236,8 @@ async def poll_account_replies(db: AsyncSession, account: EmailAccount) -> int:
         return 0
 
     transitioned = 0
-    if replies:
+    reply_senders = {r["from"] for r in replies}
+    if reply_senders:
         rows = (
             await db.execute(
                 select(CampaignEnrollment, Lead)
@@ -194,7 +247,7 @@ async def poll_account_replies(db: AsyncSession, account: EmailAccount) -> int:
                     Campaign.user_id == account.user_id,
                     func.lower(Campaign.from_email) == account.email.lower(),
                     CampaignEnrollment.status == "active",
-                    func.lower(Lead.email).in_(list(replies)),
+                    func.lower(Lead.email).in_(list(reply_senders)),
                 )
             )
         ).all()
@@ -212,6 +265,10 @@ async def poll_account_replies(db: AsyncSession, account: EmailAccount) -> int:
                 "lead_replied",
                 {"campaign_id": enr.campaign_id, "lead": lead_payload(lead)},
             )
+
+        # Store the reply bodies for the unified inbox (matched to a lead by
+        # sender address, deduped by Message-ID).
+        await _store_inbound(db, account, replies, reply_senders)
 
     bounced_now = 0
     if bounces:
@@ -267,6 +324,65 @@ async def poll_account_replies(db: AsyncSession, account: EmailAccount) -> int:
     account.last_reply_check_at = datetime.now(timezone.utc)
     await db.commit()
     return transitioned + bounced_now
+
+
+async def _store_inbound(
+    db: AsyncSession, account, replies: list[dict], senders: set[str]
+) -> None:
+    """Persist reply messages for the inbox — one row per matched lead, deduped
+    by Message-ID."""
+    from email.utils import parsedate_to_datetime
+
+    from app.models.inbound_message import InboundMessage
+    from app.models.lead_list import LeadList
+
+    # Map sender email → lead (any lead of this user with that address).
+    lead_rows = (
+        await db.execute(
+            select(Lead)
+            .join(LeadList, Lead.list_id == LeadList.id)
+            .where(
+                LeadList.user_id == account.user_id,
+                func.lower(Lead.email).in_(list(senders)),
+            )
+        )
+    ).scalars().all()
+    lead_by_email = {(ld.email or "").lower(): ld for ld in lead_rows}
+
+    for r in replies:
+        lead = lead_by_email.get(r["from"])
+        if lead is None:
+            continue
+        mid = r.get("message_id")
+        if mid:
+            exists = (
+                await db.execute(
+                    select(InboundMessage.id).where(
+                        InboundMessage.user_id == account.user_id,
+                        InboundMessage.message_id == mid,
+                    )
+                )
+            ).scalar_one_or_none()
+            if exists is not None:
+                continue
+        received = None
+        if r.get("date"):
+            try:
+                received = parsedate_to_datetime(r["date"])
+            except Exception:  # noqa: BLE001
+                received = None
+        db.add(
+            InboundMessage(
+                user_id=account.user_id,
+                lead_id=lead.id,
+                email_account_id=account.id,
+                from_email=r["from"][:255],
+                subject=r.get("subject", "")[:512],
+                body=r.get("body", ""),
+                message_id=mid,
+                received_at=received,
+            )
+        )
 
 
 async def poll_all_replies() -> int:

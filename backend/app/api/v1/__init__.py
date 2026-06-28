@@ -11,6 +11,7 @@ from app.api.v1 import (
     email_accounts,
     health,
     icp,
+    inbox,
     leads,
     linkedin_accounts,
     lists,
@@ -37,6 +38,7 @@ api_router.include_router(email.router)
 api_router.include_router(domains.router)
 api_router.include_router(email_accounts.router)
 api_router.include_router(linkedin_accounts.router)
+api_router.include_router(inbox.router)
 api_router.include_router(webhooks.router)
 api_router.include_router(track.router)
 api_router.include_router(ops.router)

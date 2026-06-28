@@ -169,6 +169,18 @@ export type WebhookCreate = {
 
 export type WebhookTestResult = { ok: boolean; detail: string };
 
+export type InboxMessage = {
+  id: number;
+  from_email: string;
+  subject: string;
+  body: string;
+  received_at: string | null;
+  is_read: boolean;
+  lead_id: number | null;
+  lead_name: string | null;
+  lead_company: string | null;
+};
+
 export type EmailAccountSetup = {
   domain: string;
   score: number;
@@ -964,6 +976,23 @@ export const api = {
     test: (id: number) =>
       authed<LinkedInTestResult>(`/linkedin-accounts/${id}/test`, {
         method: "POST",
+      }),
+  },
+
+  // Unified inbox (prospect replies)
+  inbox: {
+    list: (unreadOnly = false) =>
+      authed<InboxMessage[]>(`/inbox?unread_only=${unreadOnly}`),
+    unreadCount: () => authed<number>("/inbox/unread-count"),
+    markRead: (id: number, read = true) =>
+      authed<void>(`/inbox/${id}/read`, {
+        method: "POST",
+        body: JSON.stringify({ read }),
+      }),
+    reply: (id: number, body: string) =>
+      authed<void>(`/inbox/${id}/reply`, {
+        method: "POST",
+        body: JSON.stringify({ body }),
       }),
   },
 

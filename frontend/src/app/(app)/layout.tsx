@@ -13,6 +13,7 @@ import {
   CreditCard,
   Flame,
   Globe,
+  Inbox,
   LayoutDashboard,
   List,
   LogOut,
@@ -56,6 +57,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/groups", label: "Kampanie", icon: Megaphone },
       { href: "/campaigns", label: "Sekwencje", icon: Send },
+      { href: "/inbox", label: "Skrzynka", icon: Inbox },
       { href: "/linkedin", label: "LinkedIn", icon: Briefcase },
     ],
   },
