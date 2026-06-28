@@ -762,6 +762,11 @@ export type PersonRow = {
   created_at: string;
 };
 
+export type PeopleResponse = {
+  total: number;
+  items: PersonRow[];
+};
+
 export type SignalSummary = {
   source_id: number;
   source_name: string;
@@ -1492,7 +1497,15 @@ export const api = {
     list: () => authed<CompanyRow[]>("/companies"),
   },
   people: {
-    list: () => authed<PersonRow[]>("/people"),
+    list: (
+      opts: { limit?: number; offset?: number; q?: string } = {},
+    ) => {
+      const params = new URLSearchParams();
+      params.set("limit", String(opts.limit ?? 200));
+      params.set("offset", String(opts.offset ?? 0));
+      if (opts.q && opts.q.trim()) params.set("q", opts.q.trim());
+      return authed<PeopleResponse>(`/people?${params.toString()}`);
+    },
   },
 
   icp: {

@@ -147,9 +147,58 @@ async def list_companies_for_user(
     return out
 
 
-async def list_people_for_user(db: AsyncSession, user_id: int) -> list[dict]:
-    """Flat list of all leads across the user's lists, with denormalized
-    list_name, signals_count per lead, and last_message_sent_at."""
+async def count_people_for_user(
+    db: AsyncSession, user_id: int, q: str | None = None
+) -> int:
+    stmt = (
+        select(func.count(Lead.id))
+        .join(LeadList, LeadList.id == Lead.list_id)
+        .where(LeadList.user_id == user_id)
+    )
+    stmt = _apply_people_search(stmt, q)
+    return int((await db.execute(stmt)).scalar_one() or 0)
+
+
+def _apply_people_search(stmt, q: str | None):
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        stmt = stmt.where(
+            func.coalesce(Lead.email, "").ilike(like)
+            | func.coalesce(Lead.first_name, "").ilike(like)
+            | func.coalesce(Lead.last_name, "").ilike(like)
+            | func.coalesce(Lead.company, "").ilike(like)
+            | func.coalesce(Lead.title, "").ilike(like)
+        )
+    return stmt
+
+
+async def list_people_for_user(
+    db: AsyncSession,
+    user_id: int,
+    limit: int = 200,
+    offset: int = 0,
+    q: str | None = None,
+) -> list[dict]:
+    """Paginated list of leads across the user's lists, with denormalized
+    list_name, signals_count per lead, and last_message_sent_at. Paginating
+    server-side keeps the Osoby tab fast even with thousands of leads (a single
+    huge payload was timing out on the hosting free tier)."""
+    # Page of lead ids first (cheap), then enrich just that page.
+    page_stmt = (
+        select(Lead.id)
+        .join(LeadList, LeadList.id == Lead.list_id)
+        .where(LeadList.user_id == user_id)
+    )
+    page_stmt = _apply_people_search(page_stmt, q)
+    page_stmt = (
+        page_stmt.order_by(Lead.score.desc(), Lead.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    page_ids = [r[0] for r in (await db.execute(page_stmt)).all()]
+    if not page_ids:
+        return []
+
     # Subquery: signal count per lead
     signals_sq = (
         select(Signal.lead_id, func.count(Signal.id).label("c"))
@@ -189,7 +238,7 @@ async def list_people_for_user(db: AsyncSession, user_id: int) -> list[dict]:
         .join(LeadList, LeadList.id == Lead.list_id)
         .outerjoin(signals_sq, signals_sq.c.lead_id == Lead.id)
         .outerjoin(last_msg_sq, last_msg_sq.c.lead_id == Lead.id)
-        .where(LeadList.user_id == user_id)
+        .where(Lead.id.in_(page_ids))
         .order_by(Lead.score.desc(), Lead.created_at.desc())
     )
     result = await db.execute(stmt)

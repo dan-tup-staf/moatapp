@@ -745,44 +745,48 @@ export function CompaniesPanel() {
 
 type SortPeople = "score" | "recent" | "name" | "signals";
 
+const PEOPLE_PAGE = 200;
+
 export function PeoplePanel() {
   const [rows, setRows] = useState<PersonRow[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState<SortPeople>("score");
   const [query, setQuery] = useState("");
 
+  function describeError(err: unknown): string {
+    return err instanceof ApiError
+      ? `Błąd ${err.status}: ${err.detail}`
+      : `Błąd ładowania: ${err instanceof Error ? err.message : String(err)}`;
+  }
+
+  async function load(q: string, offset: number, append: boolean) {
+    if (append) setLoadingMore(true);
+    else setLoading(true);
+    setError(null);
+    try {
+      const res = await api.people.list({ limit: PEOPLE_PAGE, offset, q });
+      setTotal(res.total);
+      setRows((prev) => (append ? [...prev, ...res.items] : res.items));
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  }
+
+  // Initial load + debounced server-side search on query change.
   useEffect(() => {
-    (async () => {
-      try {
-        setRows(await api.people.list());
-      } catch (err) {
-        setError(
-          err instanceof ApiError
-            ? `Błąd ${err.status}: ${err.detail}`
-            : `Błąd ładowania: ${
-                err instanceof Error ? err.message : String(err)
-              }`,
-        );
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+    const t = setTimeout(() => load(query, 0, false), query ? 300 : 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
 
-  const filtered = rows.filter((p) => {
-    if (!query.trim()) return true;
-    const q = query.toLowerCase();
-    return (
-      p.email.toLowerCase().includes(q) ||
-      (p.first_name?.toLowerCase().includes(q) ?? false) ||
-      (p.last_name?.toLowerCase().includes(q) ?? false) ||
-      (p.company?.toLowerCase().includes(q) ?? false) ||
-      (p.title?.toLowerCase().includes(q) ?? false)
-    );
-  });
-
-  const sorted = [...filtered].sort((a, b) => {
+  // Sort only the loaded page client-side.
+  const sorted = [...rows].sort((a, b) => {
     if (sort === "score") return b.score - a.score;
     if (sort === "signals") return b.signals_count - a.signals_count;
     if (sort === "name") {
@@ -792,6 +796,7 @@ export function PeoplePanel() {
     }
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
+  const hasMore = rows.length < total;
 
   if (loading) return <p className="text-sm text-gray-500">Ładowanie...</p>;
   if (error)
@@ -816,7 +821,7 @@ export function PeoplePanel() {
         </div>
         <div className="flex items-center gap-3">
           <p className="text-xs text-gray-500">
-            {sorted.length} z {rows.length}
+            {rows.length} z {total}
           </p>
           <FilterGroup
             label="Sort"
@@ -836,9 +841,9 @@ export function PeoplePanel() {
         <div className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center">
           <Users className="mx-auto h-8 w-8 text-gray-300" />
           <p className="mt-2 text-sm text-gray-500">
-            {rows.length === 0
-              ? "Brak osób — dodaj leadów do listy w sekcji Listy."
-              : "Brak wyników dla filtra."}
+            {query.trim()
+              ? "Brak wyników dla wyszukiwania."
+              : "Brak osób — dodaj leadów do listy w sekcji Listy."}
           </p>
         </div>
       ) : (
@@ -941,6 +946,19 @@ export function PeoplePanel() {
               })}
             </tbody>
           </table>
+          {hasMore && (
+            <div className="border-t border-gray-100 p-3 text-center">
+              <button
+                onClick={() => load(query, rows.length, true)}
+                disabled={loadingMore}
+                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {loadingMore
+                  ? "Ładuję…"
+                  : `Pokaż więcej (${total - rows.length})`}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

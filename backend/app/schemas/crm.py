@@ -35,3 +35,10 @@ class PersonRow(BaseModel):
     signals_count: int
     last_message_sent_at: datetime | None
     created_at: datetime
+
+
+class PeopleResponse(BaseModel):
+    """Paginated Osoby payload — total for the counter, items for the page."""
+
+    total: int
+    items: list[PersonRow]
