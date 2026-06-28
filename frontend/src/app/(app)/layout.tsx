@@ -59,6 +59,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/campaigns", label: "Sekwencje", icon: Send },
       { href: "/inbox", label: "Skrzynka", icon: Inbox },
       { href: "/linkedin", label: "LinkedIn", icon: Briefcase },
+      { href: "/results", label: "Wyniki", icon: BarChart3 },
     ],
   },
   {
@@ -71,10 +72,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     title: "Analiza",
-    items: [
-      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/results", label: "Wyniki", icon: BarChart3 },
-    ],
+    items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }],
   },
 ];
 

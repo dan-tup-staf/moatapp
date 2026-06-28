@@ -21,12 +21,9 @@ Requires an AI provider (GEMINI_API_KEY or ANTHROPIC_API_KEY). If missing,
 `source.last_error`. Provider selection lives in `app.llm`.
 """
 
-import json
 import logging
-import re
 from typing import Any
 
-from app import llm
 from app.scrapers.base import BaseScraper, ScrapedSignal
 
 logger = logging.getLogger(__name__)
@@ -83,11 +80,18 @@ CHANNELS: dict[str, dict[str, Any]] = {
 }
 
 
-_JSON_ARRAY_RE = re.compile(r"\[.*\]", re.DOTALL)
-_JSON_BLOCK_RE = re.compile(r"```(?:json)?\s*(.+?)\s*```", re.DOTALL)
-
-
 class WebSearchScraper(BaseScraper):
+    """Collects REAL signals from Google News RSS search.
+
+    Google News exposes a public RSS search endpoint that returns recent, real
+    articles matching a query — no API key, deterministic, and reachable from
+    the server. This replaced the LLM-grounded approach, which was unreliable
+    (Gemini grounding often returned an empty response). For the `company_site`
+    channel we add a `site:` filter to scope to the company's domain.
+    """
+
+    _RSS = "https://news.google.com/rss/search"
+
     def __init__(self, channel: str) -> None:
         if channel not in CHANNELS:
             raise ValueError(f"Unknown web_search channel: {channel}")
@@ -95,106 +99,55 @@ class WebSearchScraper(BaseScraper):
         self.meta = CHANNELS[channel]
 
     async def fetch(self, config: dict[str, Any]) -> list[ScrapedSignal]:
+        import asyncio
+        import urllib.parse
+
+        import feedparser
+
         query = (config.get("query") or "").strip()
         if not query:
             return []
-        if not llm.is_configured():
-            raise RuntimeError(
-                "Brak klucza AI (GEMINI_API_KEY lub ANTHROPIC_API_KEY) — kanały "
-                "oparte o web_search wymagają skonfigurowanego dostawcy AI"
-            )
-
         company_domain = (config.get("company_domain") or "").strip() or None
         max_results = int(config.get("max_results", 15))
 
-        sites = list(self.meta["sites"])
+        q = query
         if self.channel == "company_site" and company_domain:
-            sites = [company_domain]
-        site_filter = (
-            " (" + " OR ".join(f"site:{s}" for s in sites) + ")" if sites else ""
-        )
-        full_query = f"{query}{site_filter}"
+            q = f"{query} site:{company_domain}"
 
-        raw = await self._search(full_query, max_results)
-        items = self._parse_items(raw)
+        url = (
+            self._RSS
+            + "?"
+            + urllib.parse.urlencode(
+                {"q": q, "hl": "pl", "gl": "PL", "ceid": "PL:pl"}
+            )
+        )
+
+        loop = asyncio.get_event_loop()
+        feed = await loop.run_in_executor(None, feedparser.parse, url)
 
         signals: list[ScrapedSignal] = []
-        for it in items[:max_results]:
-            title = (it.get("title") or "").strip()
+        for entry in feed.entries[:max_results]:
+            title = (entry.get("title") or "").strip()
             if not title:
                 continue
+            # Google News titles end with " - <Source>".
+            source = ""
+            if " - " in title:
+                title_clean, source = title.rsplit(" - ", 1)
+                title = title_clean.strip() or title
             payload = {
-                "summary": (it.get("summary") or "")[:1000],
-                "published": it.get("published"),
+                "summary": (entry.get("summary") or "")[:1000],
+                "published": entry.get("published"),
                 "channel": self.channel,
+                "source": source,
                 "search_query": query,
             }
-            cname = (it.get("company_name") or "").strip()
-            if cname:
-                payload["company_name"] = cname
             signals.append(
                 ScrapedSignal(
                     title=title[:512],
-                    url=(it.get("url") or None),
-                    company_domain=(it.get("company_domain") or company_domain),
+                    url=(entry.get("link") or None),
+                    company_domain=company_domain,
                     payload=payload,
                 )
             )
         return signals
-
-    async def _search(self, query: str, max_results: int) -> str:
-        label = self.meta["label"]
-        hint = self.meta["hint"]
-        prompt = (
-            f"Jesteś silnikiem sygnałów zakupowych (intent data) "
-            f"dla polskiego B2B. Kanał: {label}.\n\n"
-            f"Wyszukaj w internecie NAJNOWSZE (preferuj ostatnie "
-            f"30-90 dni) wyniki dla zapytania:\n{query}\n\n"
-            f"Interesują nas: {hint}.\n\n"
-            f"Zwróć maksymalnie {max_results} pozycji jako "
-            f"WYŁĄCZNIE poprawny JSON array obiektów:\n"
-            "[{\n"
-            '  "title": string,        // krótki tytuł sygnału\n'
-            '  "url": string|null,      // link do źródła\n'
-            '  "company_name": string|null, // firma której dotyczy\n'
-            '  "company_domain": string|null, // domena firmy jeśli znana\n'
-            '  "summary": string,       // 1-2 zdania po polsku\n'
-            '  "published": string|null // data publikacji jeśli znana\n'
-            "}]\n\n"
-            "Bez komentarzy, bez markdown — sam JSON array. Jeśli "
-            "nic nie znajdziesz, zwróć []. Nie zmyślaj firm ani "
-            "linków."
-        )
-        try:
-            # Generous budget: grounded models spend output tokens on internal
-            # reasoning, so a tight cap can yield an empty (MAX_TOKENS) result.
-            return await llm.web_search_text(prompt, max_tokens=4000)
-        except Exception as e:
-            logger.exception("web_search (%s) failed for %r", self.channel, query)
-            raise RuntimeError(
-                f"web_search nie powiódł się: {type(e).__name__}: {e}"
-            ) from e
-
-    def _parse_items(self, text: str) -> list[dict]:
-        if not text:
-            return []
-        candidate = text
-        m = _JSON_BLOCK_RE.search(text)
-        if m:
-            candidate = m.group(1)
-        else:
-            arr = _JSON_ARRAY_RE.search(text)
-            if arr:
-                candidate = arr.group(0)
-        try:
-            data = json.loads(candidate)
-        except json.JSONDecodeError:
-            logger.warning(
-                "web_search (%s) zwrócił niepoprawny JSON: %s",
-                self.channel,
-                text[:300],
-            )
-            return []
-        if not isinstance(data, list):
-            return []
-        return [x for x in data if isinstance(x, dict)]

@@ -963,6 +963,8 @@ export function IcpPanel() {
 
   const [saving, setSaving] = useState(false);
   const [manualCreate, setManualCreate] = useState(false);
+  // Force-show the AI (URL/manual) analyze form even when a profile exists.
+  const [showAi, setShowAi] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -994,6 +996,8 @@ export function IcpPanel() {
       setQa(newQa);
       const fresh = await api.icp.get();
       setIcp(fresh);
+      setShowAi(false);
+      setManualCreate(false);
     } catch (err) {
       const msg = err instanceof ApiError
         ? err.detail
@@ -1079,10 +1083,18 @@ export function IcpPanel() {
         </p>
       )}
 
-      {showProfile ? (
+      {showProfile && !showAi ? (
         // Stage 3 / profile workspace: editable client profile + (when an AI
         // ICP exists) the flat ICP editor + signal discovery.
         <>
+          <div className="flex justify-end">
+            <button
+              onClick={() => setShowAi(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Wygeneruj profil z adresu www (AI)
+            </button>
+          </div>
           <ClientProfileSection
             fields={icp?.icp_fields ?? EMPTY_ICP_FIELDS}
             saving={saving}
@@ -1104,9 +1116,17 @@ export function IcpPanel() {
             </>
           )}
         </>
-      ) : !hasScraped ? (
+      ) : showAi || !hasScraped ? (
         // Stage 1: Empty — URL / manual description / build profile by hand
         <>
+        {showAi && (showProfile || hasScraped) && (
+          <button
+            onClick={() => setShowAi(false)}
+            className="text-sm text-gray-500 hover:text-gray-900"
+          >
+            ← Wróć do profilu
+          </button>
+        )}
         <form
           onSubmit={handleAnalyze}
           className="space-y-3 rounded-lg border border-gray-200 bg-white p-6"
@@ -1195,7 +1215,10 @@ export function IcpPanel() {
           <div className="h-px flex-1 bg-gray-200" />
         </div>
         <button
-          onClick={() => setManualCreate(true)}
+          onClick={() => {
+            setManualCreate(true);
+            setShowAi(false);
+          }}
           className="w-full rounded-lg border border-dashed border-gray-300 bg-white px-4 py-4 text-sm font-medium text-gray-700 transition hover:border-gray-400 hover:bg-gray-50"
         >
           Stwórz profil klienta ręcznie — bez analizy AI →
