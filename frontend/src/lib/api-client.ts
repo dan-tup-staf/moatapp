@@ -243,6 +243,7 @@ export type Campaign = {
   bcc: string | null;
   sending_priority: string;
   deal_value: number | null;
+  esp_matching: boolean;
   sender_account_ids: number[];
   created_at: string;
   updated_at: string;
@@ -271,6 +272,7 @@ export type CampaignUpdate = Partial<CampaignCreate> & {
   track_clicks?: boolean;
   text_only?: boolean;
   same_thread?: boolean;
+  esp_matching?: boolean;
   cc?: string | null;
   bcc?: string | null;
   sending_priority?: string;

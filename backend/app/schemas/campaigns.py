@@ -111,6 +111,7 @@ class CampaignUpdate(BaseModel):
     track_clicks: bool | None = None
     text_only: bool | None = None
     same_thread: bool | None = None
+    esp_matching: bool | None = None
     cc: str | None = None
     bcc: str | None = None
     sending_priority: str | None = Field(default=None, max_length=32)
@@ -138,6 +139,7 @@ class CampaignRead(BaseModel):
     track_clicks: bool = False
     text_only: bool = False
     same_thread: bool = False
+    esp_matching: bool = False
     cc: str | None = None
     bcc: str | None = None
     sending_priority: str = "balanced"

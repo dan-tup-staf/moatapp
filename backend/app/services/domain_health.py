@@ -82,6 +82,35 @@ def _txt_values(answers: list[dict]) -> list[str]:
     return out
 
 
+# Recipient ESP classification (for ESP matching) — cached per process.
+_ESP_CACHE: dict[str, str] = {}
+
+
+async def detect_esp(domain_or_email: str) -> str:
+    """Classify a recipient's mail provider from MX records:
+    'google' | 'microsoft' | 'other'. Cached per domain for the process."""
+    domain = normalize_domain(domain_or_email)
+    if not domain:
+        return "other"
+    if domain in _ESP_CACHE:
+        return _ESP_CACHE[domain]
+    async with httpx.AsyncClient(timeout=10) as client:
+        mx_ans = await _answers(client, domain, "MX")
+    hosts = " ".join(
+        (a.get("data") or "").lower() for a in mx_ans if a.get("type") == 15
+    )
+    if any(k in hosts for k in ("google", "googlemail", "aspmx")):
+        esp = "google"
+    elif any(
+        k in hosts for k in ("outlook", "protection.outlook", "microsoft")
+    ):
+        esp = "microsoft"
+    else:
+        esp = "other"
+    _ESP_CACHE[domain] = esp
+    return esp
+
+
 async def check_domain(domain: str) -> dict[str, Any]:
     domain = normalize_domain(domain)
     if not domain:

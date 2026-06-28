@@ -740,6 +740,7 @@ function SettingsPanel({
   const [trackClicks, setTrackClicks] = useState(campaign.track_clicks);
   const [textOnly, setTextOnly] = useState(campaign.text_only);
   const [sameThread, setSameThread] = useState(campaign.same_thread);
+  const [espMatching, setEspMatching] = useState(campaign.esp_matching);
   const [cc, setCc] = useState(campaign.cc ?? "");
   const [bcc, setBcc] = useState(campaign.bcc ?? "");
   const [priority, setPriority] = useState(campaign.sending_priority);
@@ -786,6 +787,7 @@ function SettingsPanel({
         track_clicks: trackClicks,
         text_only: textOnly,
         same_thread: sameThread,
+        esp_matching: espMatching,
         cc: cc.trim() || null,
         bcc: bcc.trim() || null,
         sending_priority: priority,
@@ -1124,6 +1126,12 @@ function SettingsPanel({
             onChange={setSameThread}
             title="Wysyłaj w tym samym wątku"
             desc="Kolejne kroki dosyłane jako „Re:” z nagłówkami In-Reply-To/References — wątek u odbiorcy zostaje jeden."
+          />
+          <SettingsToggle
+            checked={espMatching}
+            onChange={setEspMatching}
+            title="Dopasuj ESP nadawcy do odbiorcy"
+            desc="Przy rotacji wybiera skrzynkę z tym samym dostawcą co odbiorca (Google→Google, Microsoft→Microsoft) — lepsza dostarczalność. Wykrywa ESP po rekordach MX domeny."
           />
         </div>
       </SettingsSection>

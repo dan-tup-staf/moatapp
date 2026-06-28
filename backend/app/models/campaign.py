@@ -71,6 +71,11 @@ class Campaign(Base):
     same_thread: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
     )
+    # ESP matching: prefer a sender mailbox whose provider matches the
+    # recipient's ESP (Google→Google, Microsoft→Microsoft) during rotation.
+    esp_matching: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
     # Constant Cc/Bcc (comma-separated) applied to every email in the sequence.
     cc: Mapped[str | None] = mapped_column(String(512), nullable=True)
     bcc: Mapped[str | None] = mapped_column(String(512), nullable=True)

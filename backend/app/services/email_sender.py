@@ -193,11 +193,21 @@ async def _resolve_creds(db: AsyncSession, user_id: int, from_email: str):
     return _creds_from_account(acc)
 
 
-async def _resolve_sender(db, campaign, enr):
+def _provider_esp(provider: str | None) -> str:
+    p = (provider or "").lower()
+    if p == "google":
+        return "google"
+    if p == "microsoft":
+        return "microsoft"
+    return "other"
+
+
+async def _resolve_sender(db, campaign, enr, lead=None):
     """Decide which mailbox sends this prospect's message. When the campaign has
     rotation configured, pick one of its accounts deterministically by
     enrollment id (so a prospect keeps the SAME mailbox across all steps —
-    important for thread/deliverability consistency). Returns
+    important for thread/deliverability consistency). With ESP matching on,
+    prefer a mailbox whose provider matches the recipient's ESP. Returns
     (creds_or_None, from_email, from_name, account_or_None)."""
     from app.models.email_account import EmailAccount
 
@@ -219,7 +229,17 @@ async def _resolve_sender(db, campaign, enr):
         by_id = {a.id: a for a in rows}
         ordered = [by_id[i] for i in ids if i in by_id]
         if ordered:
-            acc = ordered[enr.id % len(ordered)]
+            pool = ordered
+            if getattr(campaign, "esp_matching", False) and lead is not None:
+                from app.services.domain_health import detect_esp
+
+                esp = await detect_esp(lead.email or "")
+                matched = [
+                    a for a in ordered if _provider_esp(a.provider) == esp
+                ]
+                if matched:
+                    pool = matched
+            acc = pool[enr.id % len(pool)]
             return _creds_from_account(acc), acc.email, acc.from_name, acc
 
     acc = (
@@ -602,9 +622,9 @@ async def _process_one(db: AsyncSession, enrollment_id: int) -> Message | None:
             if parts:
                 body = f"{body}\n\n---\n" + "\n".join(parts)
 
-        # Pick the sending mailbox (supports rotation across mailboxes).
+        # Pick the sending mailbox (supports rotation + ESP matching).
         creds, send_from, send_from_name, send_acc = await _resolve_sender(
-            db, campaign, enr
+            db, campaign, enr, lead
         )
 
         # Per-account daily cap — defer to tomorrow when the chosen mailbox has
