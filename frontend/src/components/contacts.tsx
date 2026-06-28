@@ -782,18 +782,22 @@ export function CompaniesPanel() {
       </div>
 
       {/* Scoring explainer + config toggle */}
-      <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/60 px-4 py-2.5">
-        <p className="text-xs text-gray-500">
-          Tiery liczone z <strong className="text-gray-700">sumy score
-          firmy</strong> (punkty z sygnałów dopiętych do jej osób). Progi:
-          Tier 1 &gt; {cfg.tier1_min}, Tier 2 &gt; {cfg.tier2_min}.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-200 bg-indigo-50/60 px-4 py-3">
+        <div className="flex items-start gap-2">
+          <SlidersHorizontal className="mt-0.5 h-4 w-4 shrink-0 text-indigo-600" />
+          <p className="text-xs text-indigo-900/80">
+            <strong className="text-indigo-900">Scoring &amp; progi tierów.</strong>{" "}
+            Tiery liczone z sumy score firmy (punkty z sygnałów dopiętych do jej
+            osób). Aktualne progi: Tier 1 &gt; {cfg.tier1_min}, Tier 2 &gt;{" "}
+            {cfg.tier2_min}. Ustaw własne progi i wagi źródeł →
+          </p>
+        </div>
         <button
           onClick={() => setShowScoring((s) => !s)}
-          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
         >
-          <SlidersHorizontal className="h-3.5 w-3.5" />
-          {showScoring ? "Ukryj konfigurację" : "Konfiguruj scoring"}
+          <SlidersHorizontal className="h-4 w-4" />
+          {showScoring ? "Ukryj konfigurację scoringu" : "Konfiguruj scoring"}
         </button>
       </div>
 
