@@ -1291,6 +1291,8 @@ export const api = {
 
     runAll: () =>
       authed<RunAllResult>(`/signal-sources/run-all`, { method: "POST" }),
+    searchProvider: () =>
+      authed<string>(`/signal-sources/search-provider`),
   },
 
   // Signals feed

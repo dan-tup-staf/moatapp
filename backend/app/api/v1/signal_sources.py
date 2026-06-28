@@ -143,6 +143,16 @@ async def run_now(
     return RunResult(new_signals=new_count, error=obj.last_error)
 
 
+@router.get("/search-provider", response_model=str)
+async def search_provider(
+    current: User = Depends(get_current_user),
+) -> str:
+    """Which web-search backend the channels currently use."""
+    from app.scrapers.search import active_provider
+
+    return active_provider()
+
+
 @router.post("/run-all", response_model=RunAllResult)
 async def run_all(
     current: User = Depends(get_current_user),

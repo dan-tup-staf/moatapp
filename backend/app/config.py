@@ -66,6 +66,12 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"
 
+    # Optional paid search providers for signal channels. When a key is set it
+    # is preferred over the free DuckDuckGo fallback (more reliable, no
+    # rate-limit). Brave wins over SerpAPI when both are set.
+    brave_api_key: str = ""  # https://brave.com/search/api/
+    serpapi_key: str = ""  # https://serpapi.com
+
     # Anthropic API — paid alternative; uses the server-side web_search tool.
     anthropic_api_key: str = ""
     # Optional override (e.g. an Anthropic-compatible gateway). Empty = official API.

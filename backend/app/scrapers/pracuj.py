@@ -84,11 +84,11 @@ class PracujScraper(BaseScraper):
     async def _ddg_fallback(
         self, keywords: list[str], limit: int
     ) -> list[ScrapedSignal]:
-        from app.scrapers.ddg import ddg_results
+        from app.scrapers.search import web_search
 
         out: list[ScrapedSignal] = []
         for kw in keywords:
-            results = await ddg_results(
+            results = await web_search(
                 f"{kw} praca site:pracuj.pl", min(limit, 20)
             )
             for r in results:

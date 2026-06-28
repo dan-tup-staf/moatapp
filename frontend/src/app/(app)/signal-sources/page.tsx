@@ -137,6 +137,7 @@ export default function SignalSourcesPage() {
   const [running, setRunning] = useState<number | null>(null);
   const [runMsg, setRunMsg] = useState<string | null>(null);
   const [runningAll, setRunningAll] = useState(false);
+  const [provider, setProvider] = useState<string>("");
 
   async function runAll() {
     setRunningAll(true);
@@ -178,6 +179,7 @@ export default function SignalSourcesPage() {
 
   useEffect(() => {
     refresh();
+    api.signalSources.searchProvider().then(setProvider).catch(() => {});
   }, []);
 
   const activeChannel = WEB_CHANNELS.find((c) => c.value === webChannel)!;
@@ -334,9 +336,23 @@ export default function SignalSourcesPage() {
           <h2 className="text-2xl font-bold tracking-tight">Źródła sygnałów</h2>
           <p className="mt-1 max-w-2xl text-sm text-gray-600">
             Konfigurowalne scrapery intent data. Kanały web (LinkedIn, Google
-            News, X, SERP, funding) działają przez AI/web-search. Kliknij
-            „Uruchom wszystkie", aby od razu zaciągnąć sygnały.
+            News, X, SERP, funding) zaciągają realne wyniki wyszukiwania.
+            Kliknij „Uruchom wszystkie", aby od razu zaciągnąć sygnały.
           </p>
+          {provider && (
+            <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-[11px] text-gray-600">
+              Silnik wyszukiwania:{" "}
+              <span className="font-medium text-gray-800">
+                {provider === "brave"
+                  ? "Brave Search (klucz API)"
+                  : provider === "serpapi"
+                    ? "Google / SerpAPI (klucz API)"
+                    : "DuckDuckGo (darmowe)"}
+              </span>
+              {provider === "duckduckgo" &&
+                " — dodaj BRAVE_API_KEY lub SERPAPI_KEY w env dla wyższej niezawodności"}
+            </p>
+          )}
         </div>
         <button
           onClick={runAll}

@@ -182,9 +182,14 @@ class WebSearchScraper(BaseScraper):
     async def _ddg(
         self, query: str, company_domain: str | None, max_results: int
     ) -> list[ScrapedSignal]:
-        from app.scrapers.ddg import ddg_results
+        from app.scrapers.search import active_provider, web_search
 
-        results = await ddg_results(query, max_results)
+        results = await web_search(query, max_results)
+        source = {
+            "brave": "Brave Search",
+            "serpapi": "Google (SerpAPI)",
+            "duckduckgo": "DuckDuckGo",
+        }.get(active_provider(), "Web")
         return [
             ScrapedSignal(
                 title=r["title"][:512],
@@ -193,9 +198,10 @@ class WebSearchScraper(BaseScraper):
                 payload={
                     "summary": r["summary"][:1000],
                     "channel": self.channel,
-                    "source": "DuckDuckGo",
+                    "source": source,
                     "search_query": query,
                 },
             )
             for r in results
+            if r.get("url")
         ]
