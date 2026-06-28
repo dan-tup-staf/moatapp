@@ -31,6 +31,8 @@ logger = logging.getLogger(__name__)
 
 # Auto-pause a mailbox when a single scan surfaces this many hard bounces.
 _BOUNCE_PAUSE_THRESHOLD = 5
+# Pause a warm-up ramp at a lower bounce count — young senders are fragile.
+_WARMUP_BOUNCE_THRESHOLD = 2
 
 _MONTHS = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -224,6 +226,18 @@ async def poll_account_replies(db: AsyncSession, account: EmailAccount) -> int:
             enr.next_send_at = None
             lead.status = "bounced"
             bounced_now += 1
+
+    # Warm-up is fragile: even a couple of bounces tank a young sender's
+    # reputation, so pause the ramp earlier than we'd pause the whole mailbox.
+    if (
+        bounced_now >= _WARMUP_BOUNCE_THRESHOLD
+        and account.warmup_status == "warming"
+    ):
+        account.warmup_status = "paused"
+        account.last_error = (
+            f"Rozgrzewanie wstrzymane: {bounced_now} twardych odbić podczas "
+            "warm-upu. Wyczyść listę i wznów rozgrzewanie."
+        )
 
     # Deliverability guard: too many fresh bounces from this mailbox → pause it
     # so we stop torching the domain reputation until the user cleans the list.
