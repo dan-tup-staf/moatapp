@@ -17,7 +17,14 @@ import {
   Users,
 } from "lucide-react";
 
-import { api, ApiError, Signal, SignalSummary, SourceType } from "@/lib/api-client";
+import {
+  api,
+  ApiError,
+  Campaign,
+  Signal,
+  SignalSummary,
+  SourceType,
+} from "@/lib/api-client";
 
 type FeedMode = null | "all" | "companies" | "linked";
 
@@ -145,6 +152,11 @@ export default function SignalsPage() {
   const [feedMode, setFeedMode] = useState<FeedMode>(null);
   const [feedSignals, setFeedSignals] = useState<Signal[] | null>(null);
   const [feedLoading, setFeedLoading] = useState(false);
+  const [feedCampaigns, setFeedCampaigns] = useState<Campaign[]>([]);
+
+  useEffect(() => {
+    api.campaigns.list().then(setFeedCampaigns).catch(() => {});
+  }, []);
 
   async function openFeed(mode: Exclude<FeedMode, null>) {
     if (feedMode === mode) {
@@ -277,6 +289,7 @@ export default function SignalsPage() {
           mode={feedMode}
           loading={feedLoading}
           signals={feedSignals ?? []}
+          campaigns={feedCampaigns}
           onClose={() => setFeedMode(null)}
         />
       )}
@@ -556,51 +569,40 @@ function SummaryTile({
 
 const FEED_TITLES: Record<Exclude<FeedMode, null>, string> = {
   all: "Wszystkie detekcje",
-  companies: "Sygnały wg firm",
-  linked: "Sygnały z wpływem na pipeline (dopięte do leada)",
+  companies: "Firmy z sygnałem",
+  linked: "Wpływ na pipeline",
 };
+
+function signalCompany(s: Signal): string {
+  return (
+    (s.payload?.company_name as string | undefined) ||
+    s.company_domain ||
+    "(bez firmy)"
+  );
+}
 
 function SignalsFeed({
   mode,
   loading,
   signals,
+  campaigns,
   onClose,
 }: {
   mode: Exclude<FeedMode, null>;
   loading: boolean;
   signals: Signal[];
+  campaigns: Campaign[];
   onClose: () => void;
 }) {
-  const filtered =
-    mode === "linked"
-      ? signals.filter((s) => s.lead_id != null)
-      : mode === "companies"
-        ? signals.filter(
-            (s) =>
-              !!s.company_domain ||
-              !!(s.payload?.company_name as string | undefined),
-          )
-        : signals;
-
-  function company(s: Signal): string {
-    return (
-      (s.payload?.company_name as string | undefined) ||
-      s.company_domain ||
-      "(bez firmy)"
-    );
-  }
+  // Pipeline tile breakdown: by campaign / company / person.
+  const [pipeBy, setPipeBy] = useState<"kampanie" | "firmy" | "osoby">("firmy");
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
       <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-        <div>
-          <h3 className="text-sm font-semibold text-gray-900">
-            {FEED_TITLES[mode]}
-          </h3>
-          <p className="text-xs text-gray-500">
-            {loading ? "Ładuję…" : `${filtered.length} sygnałów`}
-          </p>
-        </div>
+        <h3 className="text-sm font-semibold text-gray-900">
+          {FEED_TITLES[mode]}
+        </h3>
         <button
           onClick={onClose}
           className="rounded-md px-2 py-1 text-xs text-gray-500 hover:bg-gray-100"
@@ -611,53 +613,198 @@ function SignalsFeed({
 
       {loading ? (
         <p className="p-6 text-center text-sm text-gray-500">Ładuję…</p>
-      ) : filtered.length === 0 ? (
-        <p className="p-6 text-center text-sm text-gray-500">
-          Brak sygnałów w tym widoku.
-        </p>
+      ) : mode === "all" ? (
+        <SignalList signals={signals} />
+      ) : mode === "companies" ? (
+        <CompanyBreakdown signals={signals} />
       ) : (
-        <div className="max-h-[480px] divide-y divide-gray-100 overflow-y-auto">
-          {filtered.map((s) => (
-            <div key={s.id} className="flex items-start gap-3 px-4 py-2.5">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-sm font-medium text-gray-900">
-                    {s.url ? (
-                      <a
-                        href={s.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="hover:text-indigo-600 hover:underline"
-                      >
-                        {s.title}
-                      </a>
-                    ) : (
-                      s.title
-                    )}
-                  </span>
-                </div>
-                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500">
-                  <span className="inline-flex items-center gap-1">
-                    <Building2 className="h-3 w-3" /> {company(s)}
-                  </span>
-                  {s.source_name && <span>· {s.source_name}</span>}
-                  <span>
-                    · {new Date(s.detected_at).toLocaleDateString("pl-PL")}
-                  </span>
-                  {s.lead_email && (
-                    <span className="text-emerald-600">· {s.lead_email}</span>
-                  )}
-                </div>
-              </div>
-              {s.lead_id != null && (
-                <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-                  +{s.score_weight}
-                </span>
-              )}
-            </div>
-          ))}
+        <div>
+          <div className="flex gap-1 border-b border-gray-100 p-2">
+            {(["kampanie", "firmy", "osoby"] as const).map((k) => (
+              <button
+                key={k}
+                onClick={() => setPipeBy(k)}
+                className={
+                  "rounded-md px-3 py-1.5 text-xs font-medium capitalize transition " +
+                  (pipeBy === k
+                    ? "bg-gray-900 text-white"
+                    : "text-gray-600 hover:bg-gray-100")
+                }
+              >
+                {k}
+              </button>
+            ))}
+          </div>
+          {pipeBy === "kampanie" ? (
+            <CampaignBreakdown campaigns={campaigns} />
+          ) : (
+            <EntityBreakdown
+              signals={signals.filter((s) => s.lead_id != null)}
+              by={pipeBy}
+            />
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+function SignalList({ signals }: { signals: Signal[] }) {
+  if (signals.length === 0)
+    return (
+      <p className="p-6 text-center text-sm text-gray-500">Brak sygnałów.</p>
+    );
+  return (
+    <div className="max-h-[480px] divide-y divide-gray-100 overflow-y-auto">
+      {signals.map((s) => (
+        <div key={s.id} className="flex items-start gap-3 px-4 py-2.5">
+          <div className="min-w-0 flex-1">
+            <span className="truncate text-sm font-medium text-gray-900">
+              {s.url ? (
+                <a
+                  href={s.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="hover:text-indigo-600 hover:underline"
+                >
+                  {s.title}
+                </a>
+              ) : (
+                s.title
+              )}
+            </span>
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500">
+              <span className="inline-flex items-center gap-1">
+                <Building2 className="h-3 w-3" /> {signalCompany(s)}
+              </span>
+              {s.source_name && <span>· {s.source_name}</span>}
+              <span>· {new Date(s.detected_at).toLocaleDateString("pl-PL")}</span>
+              {s.lead_email && (
+                <span className="text-emerald-600">· {s.lead_email}</span>
+              )}
+            </div>
+          </div>
+          {s.lead_id != null && (
+            <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+              +{s.score_weight}
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CompanyBreakdown({ signals }: { signals: Signal[] }) {
+  const groups = new Map<string, { count: number; score: number }>();
+  for (const s of signals) {
+    if (!s.company_domain && !(s.payload?.company_name as string | undefined))
+      continue;
+    const k = signalCompany(s);
+    const g = groups.get(k) ?? { count: 0, score: 0 };
+    g.count += 1;
+    g.score += s.lead_id != null ? s.score_weight : 0;
+    groups.set(k, g);
+  }
+  const rows = [...groups.entries()].sort((a, b) => b[1].count - a[1].count);
+  if (rows.length === 0)
+    return <p className="p-6 text-center text-sm text-gray-500">Brak firm.</p>;
+  return (
+    <div className="max-h-[480px] divide-y divide-gray-100 overflow-y-auto">
+      {rows.map(([name, g]) => (
+        <div key={name} className="flex items-center justify-between px-4 py-2.5">
+          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-900">
+            <Building2 className="h-3.5 w-3.5 text-gray-400" /> {name}
+          </span>
+          <span className="flex items-center gap-2 text-xs text-gray-500">
+            <span>{g.count} sygn.</span>
+            {g.score > 0 && (
+              <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">
+                +{g.score} pipeline
+              </span>
+            )}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EntityBreakdown({
+  signals,
+  by,
+}: {
+  signals: Signal[];
+  by: "firmy" | "osoby";
+}) {
+  const groups = new Map<string, { count: number; score: number }>();
+  for (const s of signals) {
+    const k =
+      by === "firmy" ? signalCompany(s) : s.lead_email || "(nieznana osoba)";
+    const g = groups.get(k) ?? { count: 0, score: 0 };
+    g.count += 1;
+    g.score += s.score_weight;
+    groups.set(k, g);
+  }
+  const rows = [...groups.entries()].sort((a, b) => b[1].score - a[1].score);
+  if (rows.length === 0)
+    return (
+      <p className="p-6 text-center text-sm text-gray-500">
+        Brak sygnałów dopiętych do leadów.
+      </p>
+    );
+  return (
+    <div className="max-h-[440px] divide-y divide-gray-100 overflow-y-auto">
+      {rows.map(([name, g]) => (
+        <div key={name} className="flex items-center justify-between px-4 py-2.5">
+          <span className="truncate text-sm font-medium text-gray-900">
+            {name}
+          </span>
+          <span className="flex items-center gap-2 text-xs text-gray-500">
+            <span>{g.count} sygn.</span>
+            <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">
+              +{g.score}
+            </span>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CampaignBreakdown({ campaigns }: { campaigns: Campaign[] }) {
+  const rows = [...campaigns]
+    .filter((c) => c.enrollments_count > 0)
+    .sort((a, b) => b.enrollments_count - a.enrollments_count);
+  if (rows.length === 0)
+    return (
+      <p className="p-6 text-center text-sm text-gray-500">
+        Brak kampanii z prospektami.
+      </p>
+    );
+  return (
+    <div className="max-h-[440px] divide-y divide-gray-100 overflow-y-auto">
+      {rows.map((c) => {
+        const value = (c.deal_value || 0) * c.enrollments_count;
+        return (
+          <div key={c.id} className="flex items-center justify-between px-4 py-2.5">
+            <a
+              href={`/campaigns/${c.id}`}
+              className="truncate text-sm font-medium text-gray-900 hover:text-indigo-600 hover:underline"
+            >
+              {c.name}
+            </a>
+            <span className="flex items-center gap-2 text-xs text-gray-500">
+              <span>{c.enrollments_count} prospektów</span>
+              {value > 0 && (
+                <span className="rounded-full bg-indigo-50 px-2 py-0.5 font-medium text-indigo-700">
+                  {value.toLocaleString("pl-PL")} zł
+                </span>
+              )}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
